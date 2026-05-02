@@ -1,0 +1,79 @@
+# =====================
+# Maven
+# =====================
+target/
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# =====================
+# Logs
+# =====================
+*.log
+logs/
+
+# =====================
+# Environment Variables
+# =====================
+.env
+
+# =====================
+# IDEs
+# =====================
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+### Eclipse / STS ###
+.classpath
+.project
+.settings/
+.springBeans
+.apt_generated
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+# =====================
+# OS Files
+# =====================
+.DS_Store
+Thumbs.db
+
+# =====================
+# Spring Boot
+# =====================
+*.h2.db
+*.trace
+*.db
+
+# =====================
+# Docker (optional local artifacts)
+# =====================
+docker-compose.override.yml
+
+# =====================
+# Build tools cache
+# =====================
+.mvn/timing.properties
+
+# =====================
+# Java
+# =====================
+*.class
+
+# =====================
+# Security / Secrets
+# =====================
+application-local.yml
+application-dev.yml

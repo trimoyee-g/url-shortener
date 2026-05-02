@@ -1,0 +1,66 @@
+services:
+
+    mysql:
+      image: mysql:8.0
+      environment:
+        MYSQL_DATABASE: url_shortener
+        MYSQL_USER: ${DB_USERNAME}
+        MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      ports:
+        - "3307:3306"
+
+    redis:
+      image: redis/redis-stack:latest
+      ports:
+        - "6380:6379"
+
+    kafka:
+      image: apache/kafka:latest
+      ports:
+        - "9092:9092"
+      environment:
+        KAFKA_PROCESS_ROLES: broker,controller
+        KAFKA_NODE_ID: 1
+
+        KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+
+        KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+
+        KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+
+        KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+        KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+        KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+        KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+        KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+        CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+
+    prometheus:
+      image: prom/prometheus
+      volumes:
+        - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      ports:
+        - "9090:9090"
+
+    grafana:
+      image: grafana/grafana
+      ports:
+        - "3000:3000"
+      depends_on:
+        - prometheus
+
+    app:
+      build: .
+      ports:
+        - "8080:8080"
+      depends_on:
+        - mysql
+        - redis
+        - kafka
+      environment:
+        SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/url_shortener?useSSL=false&allowPublicKeyRetrieval=true
+        SPRING_DATA_REDIS_HOST: redis
+        SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+

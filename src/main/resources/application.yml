@@ -1,0 +1,98 @@
+server:
+  port: 8080
+  # Ensure this is unique if you scale to multiple app containers
+  machine-id: ${MACHINE_ID:1}
+
+spring:
+  application:
+    name: url-shortener
+
+  datasource:
+    # Changed localhost to mysql to work inside Docker network by default
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/url_shortener}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false # Suggest false for performance, true only for debugging
+    properties:
+      hibernate:
+        # MySQL8Dialect is deprecated in newer Hibernate; use the generic one
+        # which auto-detects the version correctly.
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+
+  data:
+    redis:
+      # Changed localhost to redis to work inside Docker network
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 10
+          max-idle: 5
+          min-idle: 1
+
+  kafka:
+    # Changed localhost to kafka to work inside Docker network
+    bootstrap-servers: ${KAFKA_SERVERS:kafka:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      # Added: Ensure messages aren't lost if a broker goes down
+      acks: all
+    consumer:
+      group-id: analytics-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.urlshortener.url_shortener.*"
+
+app:
+  base-url: ${BASE_URL:http://localhost:8080}
+  jwt:
+    secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+    expiration-ms: 86400000
+    refresh-expiration-ms: 604800000
+  url:
+    default-ttl-days: 30
+    max-custom-alias-length: 50
+    min-custom-alias-length: 3
+    code-length: 7
+  rate-limit:
+    window-seconds: 60
+    max-requests: 20
+  cache:
+    url-ttl-seconds: 86400
+    stats-ttl-seconds: 300
+
+management:
+  endpoints:
+    web:
+      base-path: /actuator
+      exposure:
+        include: health, info, prometheus, metrics
+
+  endpoint:
+    prometheus:
+      enabled: true
+
+    health:
+      show-details: always
+
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+
+      percentiles:
+        http.server.requests: 0.95, 0.99
