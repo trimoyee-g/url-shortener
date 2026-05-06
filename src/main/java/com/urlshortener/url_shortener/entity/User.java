@@ -10,6 +10,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -35,6 +36,7 @@ public class User {
     private String password;
 
     @Column(length = 50)
+    @NotBlank
     private String name;
 
     @Column(nullable = false)
@@ -49,7 +51,7 @@ public class User {
     private Instant updatedAt;
 
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
-    private List<Url> urls;
+    private List<Url> urls = new ArrayList<>();
 
     @PrePersist
     @PreUpdate
