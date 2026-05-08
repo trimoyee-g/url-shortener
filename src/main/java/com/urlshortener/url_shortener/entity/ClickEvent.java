@@ -22,7 +22,7 @@ public class ClickEvent {
     @Column(nullable = false, length = 10)
     private String shortCode;
 
-    @Column(length = 45)
+    @Column(nullable = false)
     private String ipAddress;
 
     @Column(columnDefinition = "TEXT")
@@ -31,10 +31,10 @@ public class ClickEvent {
     @Column(columnDefinition = "TEXT")
     private String referrer;
 
-    @Column(length = 2)
+    @Column(length = 2, nullable = false)
     private String country;
 
     @CreationTimestamp
-    @Column(updatable = false)
+    @Column(nullable = false, updatable = false)
     private Instant clickedAt;
 }
