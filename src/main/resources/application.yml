@@ -9,9 +9,9 @@ spring:
 
   datasource:
     # Changed localhost to mysql to work inside Docker network by default
-    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/url_shortener}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:root}
+    url: ${DB_URL:jdbc:mysql://mysql:3306/url_shortener?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:appuser}
+    password: ${DB_PASSWORD:apppassword}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -22,7 +22,7 @@ spring:
       hibernate:
         # MySQL8Dialect is deprecated in newer Hibernate; use the generic one
         # which auto-detects the version correctly.
-        dialect: org.hibernate.dialect.MySQLDialect
+#        dialect: org.hibernate.dialect.MySQLDialect
         format_sql: true
 
   data:
@@ -31,6 +31,8 @@ spring:
       host: ${REDIS_HOST:redis}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
+      repositories:
+        enabled: false
       timeout: 2000ms
       lettuce:
         pool:

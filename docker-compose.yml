@@ -4,8 +4,9 @@ services:
       image: mysql:8.0
       environment:
         MYSQL_DATABASE: url_shortener
+        MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
         MYSQL_USER: ${DB_USERNAME}
-        MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+        MYSQL_PASSWORD: ${DB_PASSWORD}
       ports:
         - "3307:3306"
 
@@ -60,7 +61,9 @@ services:
         - redis
         - kafka
       environment:
-        SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/url_shortener?useSSL=false&allowPublicKeyRetrieval=true
-        SPRING_DATA_REDIS_HOST: redis
+        SPRING_DATASOURCE_URL: ${DB_URL}?useSSL=false&allowPublicKeyRetrieval=true
+        SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
+        SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+        SPRING_DATA_REDIS_HOST: ${REDIS_HOST}
         SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
 
