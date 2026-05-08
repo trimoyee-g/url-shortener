@@ -1,17 +1,18 @@
 package com.urlshortener.url_shortener.repository;
 
 import com.urlshortener.url_shortener.entity.User;
+import jakarta.persistence.EntityManager;
+import jakarta.validation.ConstraintViolationException;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.jdbc.EmbeddedDatabaseConnection;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import jakarta.persistence.EntityManager;
-import java.util.Optional;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -27,134 +28,179 @@ public class UserRepositoryTests {
     @Autowired
     private EntityManager entityManager;
 
+    // Constants
+
+    private static final String EMAIL = "test@example.com";
+    private static final String PASSWORD = "password123";
+
+
+    // Helper
+
+    private User buildUser(String email, String password) {
+        return User.builder()
+                .email(email)
+                .password(password)
+                .build();
+    }
+
+
+    // findByEmail
+
     @Test
-    public void UserRepository_findByEmail_returnsIfUserExistsByEmail(){
+    @DisplayName("findByEmail returns user when email exists")
+    public void UserRepository_findByEmail_returnsIfUserExistsByEmail() {
 
         // Arrange
-        User user = User.builder()
-                .email("test@example.com")
-                .password("password123")
-                .build();
-
-        userRepository.saveAndFlush(user);
+        userRepository.saveAndFlush(buildUser(EMAIL, PASSWORD));
+        entityManager.clear();
 
         // Act
-        Optional<User> foundUser = userRepository.findByEmail("test@example.com");
+        Optional<User> foundUser = userRepository.findByEmail(EMAIL);
 
         // Assert
         assertThat(foundUser)
                 .isPresent()
-                        .hasValueSatisfying(u -> {
-                                    assertThat(u.getEmail()).isEqualTo("test@example.com");
-                                    assertThat(u.isActive()).isTrue();
-                                });
-
+                .hasValueSatisfying(u -> {
+                    assertThat(u.getEmail()).isEqualTo(EMAIL);
+                    assertThat(u.isActive()).isTrue();
+                });
     }
 
     @Test
-    public void UserRepository_findByEmail_returnsEmptyIfUserNotFoundByEmail(){
+    @DisplayName("findByEmail returns empty when user not found")
+    public void UserRepository_findByEmail_returnsEmptyIfUserNotFoundByEmail() {
 
         // Act
-        Optional<User> foundUser = userRepository.findByEmail("notfound@example.com");
+        Optional<User> foundUser =
+                userRepository.findByEmail("notfound@example.com");
 
         // Assert
         assertThat(foundUser).isEmpty();
     }
 
+
+    // existsByEmail
+
     @Test
-    public void UserRepository_existsByEmail_returnsTrueIfEmailExists(){
+    @DisplayName("existsByEmail returns true when email exists")
+    public void UserRepository_existsByEmail_returnsTrueIfEmailExists() {
 
         // Arrange
-        User user = User.builder()
-                .email("test@example.com")
-                .password("password123")
-                .build();
-
-        userRepository.saveAndFlush(user);
+        userRepository.saveAndFlush(buildUser(EMAIL, PASSWORD));
 
         // Act
-        boolean exists = userRepository.existsByEmail("test@example.com");
+        boolean exists = userRepository.existsByEmail(EMAIL);
 
         // Assert
         assertThat(exists).isTrue();
     }
 
     @Test
-    public void UserRepository_existsByEmail_returnsFalseIfEmailDoesNotExist(){
+    @DisplayName("existsByEmail returns false when email does not exist")
+    public void UserRepository_existsByEmail_returnsFalseIfEmailDoesNotExist() {
 
         // Act
-        boolean exists = userRepository.existsByEmail("notfound@example.com");
+        boolean exists =
+                userRepository.existsByEmail("notfound@example.com");
 
         // Assert
         assertThat(exists).isFalse();
     }
 
+
+    // Email normalization
+
     @Test
-    public void UserRepository_save_normalizesEmailToLowerCase(){
+    @DisplayName("save normalizes email to lowercase")
+    public void UserRepository_save_normalizesEmailToLowerCase() {
 
         // Arrange
-        User user = User.builder()
-                .email("TEST@Example.COM")
-                .password("password123")
-                .build();
+        userRepository.saveAndFlush(
+                buildUser("TEST@Example.COM", PASSWORD)
+        );
+
+        entityManager.clear();
 
         // Act
-        userRepository.saveAndFlush(user);
-        entityManager.clear();
-        Optional<User> foundUser = userRepository.findByEmail("test@example.com");
+        Optional<User> foundUser = userRepository.findByEmail(EMAIL);
 
         // Assert
         assertThat(foundUser)
                 .isPresent()
                 .hasValueSatisfying(u ->
-                        assertThat(u.getEmail()).isEqualTo("test@example.com"));
+                        assertThat(u.getEmail()).isEqualTo(EMAIL)
+                );
     }
 
     @Test
-    public void UserRepository_save_trimsAndNormalizesEmail(){
+    @DisplayName("save trims and normalizes email")
+    public void UserRepository_save_trimsAndNormalizesEmail() {
 
         // Arrange
-        User user = User.builder()
-                .email("  TEST@Example.COM  ")
-                .password("password123")
-                .build();
+        userRepository.saveAndFlush(
+                buildUser("  TEST@Example.COM  ", PASSWORD)
+        );
 
-        // Act
-        userRepository.saveAndFlush(user);
         entityManager.clear();
 
-        Optional<User> foundUser = userRepository.findByEmail("test@example.com");
+        // Act
+        Optional<User> foundUser = userRepository.findByEmail(EMAIL);
+
         // Assert
         assertThat(foundUser)
                 .isPresent()
                 .hasValueSatisfying(u ->
-                        assertThat(u.getEmail()).isEqualTo("test@example.com")
+                        assertThat(u.getEmail()).isEqualTo(EMAIL)
                 );
     }
 
 
+    // Duplicate email constraint
+
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public void UserRepository_save_throwsException_whenEmailAlreadyExists(){
+    @DisplayName("save throws exception when email already exists")
+    public void UserRepository_save_throwsException_whenEmailAlreadyExists() {
 
         // Arrange
         String email = "duplicate_" + System.nanoTime() + "@example.com";
-        User user1 = User.builder()
-                .email(email)
-                .password("password123")
-                .build();
 
-        User user2 = User.builder()
-                .email(email) // same email
-                .password("password456")
-                .build();
+        userRepository.saveAndFlush(buildUser(email, PASSWORD));
 
-        userRepository.saveAndFlush(user1);
+        User duplicateUser = buildUser(email, "password456");
 
         // Act + Assert
-        assertThatThrownBy(() -> {
-            userRepository.saveAndFlush(user2);
-        }).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() ->
+                userRepository.saveAndFlush(duplicateUser)
+        ).isInstanceOf(DataIntegrityViolationException.class);
+    }
 
+
+    // Bean validation tests
+
+    @Test
+    @DisplayName("save throws exception when email is null")
+    public void UserRepository_save_throwsException_whenEmailIsNull() {
+
+        // Arrange
+        User user = buildUser(null, PASSWORD);
+
+        // Act + Assert
+        assertThatThrownBy(() ->
+                userRepository.saveAndFlush(user)
+        ).isInstanceOf(ConstraintViolationException.class);
+    }
+
+    @Test
+    @DisplayName("save throws exception when password is null")
+    public void UserRepository_save_throwsException_whenPasswordIsNull() {
+
+        // Arrange
+        User user = buildUser(EMAIL, null);
+
+        // Act + Assert
+        assertThatThrownBy(() ->
+                userRepository.saveAndFlush(user)
+        ).isInstanceOf(ConstraintViolationException.class);
     }
 }
