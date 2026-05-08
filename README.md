@@ -64,12 +64,15 @@ cd url-shortener
 Create `.env` file:
 
 ```env
-DB_URL=jdbc:mysql://localhost:3306/urlshortener
-DB_USERNAME=root
-DB_PASSWORD=your_password
+DB_URL=jdbc:mysql://mysql:3306/urlshortener
+DB_USERNAME=appuser
+DB_PASSWORD=apppassword
+MYSQL_ROOT_PASSWORD=your_password
 JWT_SECRET=your_secret
-REDIS_HOST=localhost
+REDIS_HOST=redis
 REDIS_PORT=6379
+KAFKA_SERVERS=kafka:9092
+KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
 ```
 
 ### 3️⃣ Build project
