@@ -18,19 +18,10 @@ Designed to support **high-throughput URL generation, ultra-fast redirects, asyn
 
 ## ⚡ Multi-Layer Caching Architecture
 
-- Redis-powered **cache-first redirect flow**
-- Implements **Cache-aside** and **Write-through** caching strategies
-- Designed for **sub-10ms redirect latency**
-- Reduces database round-trips under heavy traffic
-
----
-
-## 🛡️ Cache Shielding with Bloom Filters
-
-- Uses **Redisson Bloom Filter** for fast negative lookups
-- Prevents cache penetration attacks
-- Shields MySQL from unnecessary invalid requests
-- Minimizes database load during malicious or random traffic spikes
+- **Bloom Filter** pre-screens every request — blocks non-existent key lookups before they reach Redis or MySQL (cache penetration protection).
+- **Redis-first** on every redirect — cache hit returns instantly, no DB touch, sub-10ms latency.
+- **Cache-aside** on miss — queries MySQL, writes result back to Redis for subsequent requests.
+- **Write-through** on URL creation — Redis and MySQL updated atomically, no stale reads.
 
 ---
 
@@ -45,11 +36,9 @@ Designed to support **high-throughput URL generation, ultra-fast redirects, asyn
 
 ## 🚦 Distributed Rate Limiting
 
-- Sliding Window Rate Limiter implemented using Redis
-- Protects APIs against:
-    - DDoS attacks
-    - excessive scraping
-    - abusive traffic bursts
+- **Leaky bucket** algorithm implemented via **Redis Lua scripts** — atomic execution across all instances, no race conditions.
+- Rate limits enforced per **IP and email** — 20 requests per 60s window.
+- Protects against DDoS, abusive traffic bursts, and excessive scraping.
 
 ---
 
