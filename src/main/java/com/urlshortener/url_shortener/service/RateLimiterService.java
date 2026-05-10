@@ -103,7 +103,7 @@ public class RateLimiterService {
 
         if (result == null || result == 0L) {
             rateLimitBlockedCounter.increment();
-            throw new RateLimitExceededException("Rate limit exceeded for: " + key);
+            throw new RateLimitExceededException(key);
         }
     }
 }
