@@ -169,7 +169,7 @@ Docker Compose will automatically:
 # 🐳 Docker Hub Image
 
 ```bash
-docker pull trimoyeeg/url-shortener:v1
+docker pull trimoyeeg/url-shortener:v2
 ```
 
 ---
