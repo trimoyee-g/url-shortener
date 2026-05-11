@@ -15,5 +15,6 @@ public class UrlClickEvent {
     private String timestamp;
     private String ipAddress;
     private String userAgent;
+    private String country; // populated by GeoIP lookup before publishing
     private String referer;
 }

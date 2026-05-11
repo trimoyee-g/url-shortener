@@ -46,6 +46,8 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: true
       # Added: Ensure messages aren't lost if a broker goes down
       acks: all
     consumer:
@@ -54,7 +56,8 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.json.trusted.packages: "com.urlshortener.url_shortener.*"
+        spring.json.trusted.packages: "*"
+        spring.json.use.type.headers: true
 
 app:
   base-url: ${BASE_URL:http://localhost:8080}

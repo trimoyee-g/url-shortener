@@ -4,6 +4,7 @@ import com.urlshortener.url_shortener.dto.AuthResponse;
 import com.urlshortener.url_shortener.dto.LoginRequest;
 import com.urlshortener.url_shortener.dto.RegisterRequest;
 import com.urlshortener.url_shortener.entity.User;
+import com.urlshortener.url_shortener.exception.AlreadyExistsException;
 import com.urlshortener.url_shortener.repository.UserRepository;
 import com.urlshortener.url_shortener.util.JwtUtil;
 import org.junit.jupiter.api.DisplayName;
@@ -138,7 +139,7 @@ class AuthServiceTests {
 
             // Act + Assert
             assertThatThrownBy(() -> authService.register(request))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(AlreadyExistsException.class)
                     .hasMessageContaining("Email already registered");
 
             verify(userRepository, never()).save(any(User.class));

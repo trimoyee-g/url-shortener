@@ -31,6 +31,7 @@ public class ClickEvent {
     @Column(columnDefinition = "TEXT")
     private String referrer;
 
+    // "XX" = unknown/private IP. Nullable=false safe now since GeoIpService always returns a value.
     @Column(length = 2, nullable = false)
     private String country;
 

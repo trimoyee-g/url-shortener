@@ -22,8 +22,8 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(404, "Not Found", ex.getMessage(), Instant.now()));
     }
 
-    @ExceptionHandler(AliasAlreadyExistsException.class)
-    public ResponseEntity<ErrorResponse> handleAlias(AliasAlreadyExistsException ex) {
+    @ExceptionHandler(AlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handleAlias(AlreadyExistsException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ErrorResponse(409, "Conflict", ex.getMessage(), Instant.now()));
     }

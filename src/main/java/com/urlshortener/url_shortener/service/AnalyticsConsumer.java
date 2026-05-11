@@ -9,7 +9,6 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
-
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -21,20 +20,21 @@ public class AnalyticsConsumer {
     @KafkaListener(topics = "url-clicks", groupId = "analytics-group")
     public void handleClickEvent(UrlClickEvent dto) {
         try {
-            // 1. Save to DB
             ClickEvent event = ClickEvent.builder()
                     .shortCode(dto.getShortCode())
                     .ipAddress(dto.getIpAddress())
                     .userAgent(dto.getUserAgent())
                     .referrer(dto.getReferer())
+                    .country(dto.getCountry() != null ? dto.getCountry() : "XX")
                     .build();
-            clickEventRepository.save(event);
 
-            // 2. Increment Redis counter for the "getClickCount" method above
+            clickEventRepository.save(event);
             redisTemplate.opsForValue().increment("clicks:" + dto.getShortCode());
 
+            log.debug("Processed click event for: {}", dto.getShortCode());
+
         } catch (Exception e) {
-            log.error("Error processing click event for {}: {}", dto.getShortCode(), e.getMessage());
+            log.error("Error processing click event for {}: {}", dto.getShortCode(), e.getMessage(), e);
         }
     }
 }

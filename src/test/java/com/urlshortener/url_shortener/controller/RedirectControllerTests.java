@@ -5,6 +5,7 @@ import com.urlshortener.url_shortener.exception.GlobalExceptionHandler;
 import com.urlshortener.url_shortener.exception.UrlNotFoundException;
 import com.urlshortener.url_shortener.filter.JwtAuthFilter;
 import com.urlshortener.url_shortener.service.AnalyticsProducer;
+import com.urlshortener.url_shortener.service.GeoIpService;
 import com.urlshortener.url_shortener.service.UrlService;
 import com.urlshortener.url_shortener.util.JwtUtil;
 import org.junit.jupiter.api.DisplayName;
@@ -17,6 +18,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.web.servlet.MockMvc;
+import static org.mockito.ArgumentMatchers.anyString;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -41,6 +43,9 @@ class RedirectControllerTests {
 
     @MockBean
     private AnalyticsProducer analyticsProducer;
+
+    @MockBean
+    private GeoIpService geoIpService;
 
     @MockBean
     private JwtUtil jwtUtil;
@@ -87,10 +92,11 @@ class RedirectControllerTests {
         }
 
         @Test
-        @DisplayName("302 Found — click event contains correct shortCode, User-Agent and Referer")
+        @DisplayName("302 Found — click event contains correct shortCode, User-Agent, Referer and country")
         void clickEventContainsCorrectFields() throws Exception {
 
             when(urlService.resolve(TEST_SHORT_CODE)).thenReturn(TEST_LONG_URL);
+            when(geoIpService.getCountryCode(anyString())).thenReturn("US"); // ← add this
 
             mockMvc.perform(get(REDIRECT_URL, TEST_SHORT_CODE)
                             .header("User-Agent", "Mozilla/5.0")
@@ -104,6 +110,7 @@ class RedirectControllerTests {
             assertThat(event.getShortCode()).isEqualTo(TEST_SHORT_CODE);
             assertThat(event.getUserAgent()).isEqualTo("Mozilla/5.0");
             assertThat(event.getReferer()).isEqualTo("https://referrer.com");
+            assertThat(event.getCountry()).isEqualTo("US");  // ← add this
             assertThat(event.getIpAddress()).isNotNull();
         }
 
@@ -112,6 +119,8 @@ class RedirectControllerTests {
         void publishesClickEventWithNullHeaders() throws Exception {
 
             when(urlService.resolve(TEST_SHORT_CODE)).thenReturn(TEST_LONG_URL);
+
+            when(geoIpService.getCountryCode(anyString())).thenReturn("XX");
 
             // No User-Agent or Referer headers
             mockMvc.perform(get(REDIRECT_URL, TEST_SHORT_CODE))
@@ -123,6 +132,7 @@ class RedirectControllerTests {
             UrlClickEvent event = captor.getValue();
             assertThat(event.getUserAgent()).isNull();
             assertThat(event.getReferer()).isNull();
+            assertThat(event.getCountry()).isEqualTo("XX");
         }
 
         @Test

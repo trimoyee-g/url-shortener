@@ -23,6 +23,8 @@ public interface UrlRepository extends JpaRepository<Url, Long> {
 
     Set<Url> findByUserIdAndActiveTrueOrderByCreatedAtDesc(Long userId);
 
+    List<Url> findByUserEmailAndActiveTrue(String email);
+
     // Soft-delete expired URLs — used by cleanup worker
     @Modifying
     @Query("UPDATE Url u SET u.active = false WHERE u.expiresAt < :now AND u.active = true")

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.urlshortener.url_shortener.dto.AuthResponse;
 import com.urlshortener.url_shortener.dto.LoginRequest;
 import com.urlshortener.url_shortener.dto.RegisterRequest;
+import com.urlshortener.url_shortener.exception.AlreadyExistsException;
 import com.urlshortener.url_shortener.exception.GlobalExceptionHandler;
 import org.springframework.security.authentication.BadCredentialsException;
 import com.urlshortener.url_shortener.filter.JwtAuthFilter;
@@ -159,7 +160,7 @@ class AuthControllerTests {
                     .build();
 
             when(authService.register(any(RegisterRequest.class)))
-                    .thenThrow(new com.urlshortener.url_shortener.exception.AliasAlreadyExistsException(
+                    .thenThrow(new AlreadyExistsException(
                             "Email already registered: alice@example.com"));
 
             mockMvc.perform(post(REGISTER_URL)

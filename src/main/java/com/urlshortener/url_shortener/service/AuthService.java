@@ -4,6 +4,7 @@ import com.urlshortener.url_shortener.dto.LoginRequest;
 import com.urlshortener.url_shortener.dto.RegisterRequest;
 import com.urlshortener.url_shortener.dto.AuthResponse;
 import com.urlshortener.url_shortener.entity.User;
+import com.urlshortener.url_shortener.exception.AlreadyExistsException;
 import com.urlshortener.url_shortener.repository.UserRepository;
 import com.urlshortener.url_shortener.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +25,7 @@ public class AuthService {
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new IllegalArgumentException("Email already registered: " + request.getEmail());
+            throw new AlreadyExistsException("Email already registered: " + request.getEmail());
         }
 
         User user = User.builder()

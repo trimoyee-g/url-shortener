@@ -4,7 +4,8 @@ import com.urlshortener.url_shortener.dto.ShortenRequest;
 import com.urlshortener.url_shortener.dto.UrlResponse;
 import com.urlshortener.url_shortener.entity.Url;
 import com.urlshortener.url_shortener.entity.User;
-import com.urlshortener.url_shortener.exception.AliasAlreadyExistsException;
+import com.urlshortener.url_shortener.exception.AlreadyExistsException;
+import com.urlshortener.url_shortener.exception.ForbiddenException;
 import com.urlshortener.url_shortener.exception.UrlNotFoundException;
 import com.urlshortener.url_shortener.repository.UrlRepository;
 import com.urlshortener.url_shortener.repository.UserRepository;
@@ -207,7 +208,7 @@ class UrlServiceImplTests {
 
             assertThatThrownBy(() ->
                     urlService.shorten(request, email, ip)
-            ).isInstanceOf(AliasAlreadyExistsException.class);
+            ).isInstanceOf(AlreadyExistsException.class);
         }
 
         @Test
@@ -377,7 +378,7 @@ class UrlServiceImplTests {
                             "abc123",
                             "other@example.com"
                     )
-            ).isInstanceOf(IllegalArgumentException.class);
+            ).isInstanceOf(ForbiddenException.class);
         }
     }
 

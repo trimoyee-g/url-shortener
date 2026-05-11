@@ -4,7 +4,7 @@ import com.urlshortener.url_shortener.dto.ShortenRequest;
 import com.urlshortener.url_shortener.dto.UrlResponse;
 import com.urlshortener.url_shortener.entity.Url;
 import com.urlshortener.url_shortener.entity.User;
-import com.urlshortener.url_shortener.exception.AliasAlreadyExistsException;
+import com.urlshortener.url_shortener.exception.AlreadyExistsException;
 import com.urlshortener.url_shortener.exception.ForbiddenException;
 import com.urlshortener.url_shortener.exception.UrlNotFoundException;
 import com.urlshortener.url_shortener.repository.UrlRepository;
@@ -97,7 +97,7 @@ public class UrlServiceImpl implements UrlService {
         String customAlias = request.getCustomAlias();
         if (customAlias != null && !customAlias.isBlank()) {
             if (urlRepository.existsByCustomAlias(customAlias)) {
-                throw new AliasAlreadyExistsException(customAlias);
+                throw new AlreadyExistsException("Custom alias already exists: "+customAlias);
             }
         }
 
@@ -129,6 +129,10 @@ public class UrlServiceImpl implements UrlService {
                 .expiresAt(expiresAt)
                 .createdAt(url.getCreatedAt())
                 .build());
+
+        // Make immediately resolvable without waiting for Kafka consumer
+        cacheUrl(shortCode, normalizedUrl, expiresAt);  // Redis cache
+        bloomFilter.add(shortCode);                      // Bloom Filter
 
         log.info("Published short URL create event: {} -> {}", shortCode, url.getLongUrl());
         return toResponse(url);
