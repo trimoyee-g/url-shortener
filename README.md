@@ -42,6 +42,73 @@ Designed to support **high-throughput URL generation, ultra-fast redirects, asyn
 
 ---
 
+# 🧪 Testing Strategy
+
+This project follows the **Testing Pyramid** approach to ensure fast feedback, high confidence, and production reliability.
+
+```text
+                    ┌──────────────────────┐
+                    │      E2E Tests       │
+                    │  Full HTTP flows     │
+                    │ RestAssured + Docker │
+                    └──────────────────────┘
+                               ▲
+                    ┌──────────────────────┐
+                    │  Integration Tests   │
+                    │ Spring + Redis + DB  │
+                    │ Kafka + Testcontainers│
+                    └──────────────────────┘
+                               ▲
+                    ┌──────────────────────┐
+                    │     Unit Tests       │
+                    │ Services / Controllers│
+                    │ Repositories / Utils │
+                    └──────────────────────┘
+```
+
+### ✅ Unit Tests
+- Fast isolated testing of:
+    - Services
+    - Controllers
+    - Repositories
+    - JWT logic
+    - Base62 encoder
+    - Snowflake ID generator
+    - Rate limiter logic
+- Uses Mockito for dependency isolation
+
+### ✅ Integration Tests
+- Verifies interaction between:
+    - Spring Boot
+    - MySQL
+    - Redis
+    - Kafka
+- Uses:
+    - Testcontainers
+    - MockMvc
+    - Awaitility
+- Validates async event-driven workflows
+
+### ✅ End-to-End (E2E) Tests
+- Full black-box API testing using:
+    - RestAssured
+    - Real HTTP requests
+    - Full security chain
+    - Real infrastructure
+- Tests complete production-like user flows:
+    - Authentication
+    - URL shortening
+    - Redirects
+    - Analytics
+    - Authorization
+### ✅ Test Infrastructure
+- Testcontainers-based isolated test environments
+- Production-like Dockerized testing setup
+- Automated container lifecycle management
+
+---
+
+
 ## 📈 Observability & Monitoring
 
 Integrated monitoring stack using:
@@ -87,6 +154,7 @@ Analytics Pipeline
 | Messaging | Apache Kafka (KRaft) |
 | Monitoring | Prometheus, Grafana |
 | Containerization | Docker, Docker Compose |
+| Testing | JUnit 5, MockMvc, RestAssured, Testcontainers, Awaitility |
 | Build Tool | Maven |
 
 ---
@@ -102,7 +170,7 @@ Analytics Pipeline
 - Hot-path Optimization
 - Distributed Rate Limiting
 - Asynchronous Analytics Processing
-
+- Containerized Integration Testing
 ---
 
 # 🚀 Getting Started
@@ -189,12 +257,6 @@ docker compose up -d
 docker compose down
 ```
 
-Remove containers and volumes:
-
-```bash
-docker compose down -v
-```
-
 ---
 
 # 📡 API Endpoints
@@ -271,8 +333,6 @@ GET /api/v1/urls/{shortCode}/qr?size=300
 - CDN-backed redirects
 - Advanced fraud detection
 - Distributed cache invalidation
-- Clickstream analytics
-- Geo-based analytics
 
 ---
 
