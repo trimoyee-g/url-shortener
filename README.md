@@ -1,6 +1,6 @@
 # 🚀 URL Shortener
 
-A scalable, production-oriented **URL Shortener Platform** built using **Spring Boot, Redis, Kafka, MySQL, Docker, Prometheus, and Grafana**.  
+A scalable, production-oriented **URL Shortener Platform** built using **Spring Boot, React, Redis, Kafka, MySQL, Docker, Prometheus, and Grafana**.  
 Designed to support **high-throughput URL generation, ultra-fast redirects, asynchronous analytics processing, and resilient distributed caching**.
 
 ---
@@ -21,7 +21,7 @@ Designed to support **high-throughput URL generation, ultra-fast redirects, asyn
 - **Bloom Filter** pre-screens every request — blocks non-existent key lookups before they reach Redis or MySQL (cache penetration protection).
 - **Redis-first** on every redirect — cache hit returns instantly, no DB touch, sub-10ms latency.
 - **Cache-aside** on miss — queries MySQL, writes result back to Redis for subsequent requests.
-- **Write-through** on URL creation — Redis and MySQL updated atomically, no stale reads.
+- **Write-through** on URL creation — Redis and Bloom Filter updated immediately after Kafka publish, no stale reads.
 
 ---
 
@@ -39,6 +39,19 @@ Designed to support **high-throughput URL generation, ultra-fast redirects, asyn
 - **Leaky bucket** algorithm implemented via **Redis Lua scripts** — atomic execution across all instances, no race conditions.
 - Rate limits enforced per **IP and email** — 20 requests per 60s window.
 - Protects against DDoS, abusive traffic bursts, and excessive scraping.
+
+---
+
+## 🖥️ Frontend Dashboard
+
+- Built with **React + Vite + Material UI**
+- Dark terminal-inspired design
+- Full authentication flow (register / login)
+- URL shortening with optional custom alias and TTL
+- Dashboard table with copy-to-clipboard
+- Per-URL analytics with country breakdown and clicks-by-day bar chart
+- QR code generation and PNG download
+- JWT-based session management
 
 ---
 
@@ -101,13 +114,13 @@ This project follows the **Testing Pyramid** approach to ensure fast feedback, h
     - Redirects
     - Analytics
     - Authorization
+
 ### ✅ Test Infrastructure
 - Testcontainers-based isolated test environments
 - Production-like Dockerized testing setup
 - Automated container lifecycle management
 
 ---
-
 
 ## 📈 Observability & Monitoring
 
@@ -128,7 +141,7 @@ Tracks:
 # 🏗️ Architecture Overview
 
 ```text
-Client
+React Frontend (Vite + MUI)
    ↓
 Spring Boot API
    ↓
@@ -147,6 +160,7 @@ Analytics Pipeline
 
 | Category | Technologies |
 |---|---|
+| Frontend | React 18, Vite, Material UI, Lucide Icons |
 | Backend | Java 17, Spring Boot |
 | Security | Spring Security, JWT |
 | Database | MySQL |
@@ -171,6 +185,7 @@ Analytics Pipeline
 - Distributed Rate Limiting
 - Asynchronous Analytics Processing
 - Containerized Integration Testing
+
 ---
 
 # 🚀 Getting Started
@@ -189,7 +204,7 @@ cd url-shortener
 Create a `.env` file in the project root:
 
 ```env
-DB_URL=jdbc:mysql://mysql:3306/urlshortener
+DB_URL=jdbc:mysql://mysql:3306/url_shortener
 DB_USERNAME=appuser
 DB_PASSWORD=apppassword
 
@@ -201,15 +216,14 @@ REDIS_HOST=redis
 REDIS_PORT=6379
 
 KAFKA_SERVERS=kafka:9092
-KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
 ```
 
 ---
 
-## 3️⃣ Start the Platform
+## 3️⃣ Start the Infrastructure
 
 ```bash
-docker compose up
+docker compose up -d
 ```
 
 Docker Compose will automatically:
@@ -221,23 +235,25 @@ Docker Compose will automatically:
 - Start Prometheus
 - Start Grafana
 - Start the Spring Boot application
-
+- 
 ---
 
-# 🌐 Access Services
+## 5️⃣ Run the Frontend
 
-| Service | URL |
-|---|---|
-| Backend API | http://localhost:8080 |
-| Grafana Dashboard | http://localhost:3000 |
-| Prometheus | http://localhost:9090 |
+```bash
+cd url-shortener-ui
+npm install
+npm run dev
+```
+
+The frontend will be available at `http://localhost:5173` and connects to the backend at `http://localhost:8080`.
 
 ---
 
 # 🐳 Docker Hub Image
 
 ```bash
-docker pull trimoyeeg/url-shortener:v2
+docker pull trimoyeeg/url-shortener:v3
 ```
 
 ---
@@ -273,7 +289,7 @@ POST /api/v1/auth/login
 ## 🔗 URL Management
 
 ```http
-POST   /api/v1/urls
+POST   /api/v1/urls/shorten
 GET    /api/v1/urls
 DELETE /api/v1/urls/{shortCode}
 ```
@@ -317,22 +333,22 @@ GET /api/v1/urls/{shortCode}/qr?size=300
 
 # 🐳 Dockerized Services
 
-- Spring Boot Application
-- MySQL Database
-- Redis Cache
-- Apache Kafka
-- Prometheus
-- Grafana
+| Container | Purpose |
+|---|---|
+| `mysql` | Primary data store |
+| `redis` | Cache + rate limiting + click counters |
+| `kafka` | Async event streaming |
+| `prometheus` | Metrics collection |
+| `grafana` | Metrics visualization |
+| `app` | Spring Boot backend (prod profile only) |
 
 ---
 
 # 🔮 Future Enhancements
 
-- Custom domains
 - Multi-region deployment
 - CDN-backed redirects
 - Advanced fraud detection
-- Distributed cache invalidation
 
 ---
 
@@ -352,7 +368,6 @@ If you'd like to contribute:
 2. Create a feature branch
 3. Make your changes
 4. Open a Pull Request
-
 
 ---
 
