@@ -53,7 +53,7 @@ services:
         - prometheus
 
     app:
-      image: trimoyeeg/url-shortener:v2
+      image: trimoyeeg/url-shortener:v3
       ports:
         - "8080:8080"
       depends_on:
