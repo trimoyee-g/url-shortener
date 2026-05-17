@@ -240,6 +240,9 @@ class UrlServiceImplTests {
 
             String shortCode = "abc123";
 
+            when(bloomFilter.mightContain(shortCode))
+                    .thenReturn(true);
+
             when(valueOperations.get("url:" + shortCode))
                     .thenReturn("https://google.com");
 
@@ -291,13 +294,10 @@ class UrlServiceImplTests {
         }
 
         @Test
-        @DisplayName("throws when bloom filter rejects code")
+        @DisplayName("throws when bloom filter rejects code — Redis is never consulted")
         void throwsWhenBloomFilterRejects() {
 
             String shortCode = "missing";
-
-            when(valueOperations.get("url:" + shortCode))
-                    .thenReturn(null);
 
             when(bloomFilter.mightContain(shortCode))
                     .thenReturn(false);
@@ -305,6 +305,8 @@ class UrlServiceImplTests {
             assertThatThrownBy(() ->
                     urlService.resolve(shortCode)
             ).isInstanceOf(UrlNotFoundException.class);
+
+            verify(valueOperations, never()).get(anyString());
         }
 
         @Test
