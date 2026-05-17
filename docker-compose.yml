@@ -44,6 +44,11 @@ services:
         - ./prometheus.yml:/etc/prometheus/prometheus.yml
       ports:
         - "9090:9090"
+      # --web.enable-remote-write-receiver lets k6 push metrics via
+      # experimental-prometheus-rw output (POST /api/v1/write)
+      command:
+        - '--config.file=/etc/prometheus/prometheus.yml'
+        - '--web.enable-remote-write-receiver'
 
     grafana:
       image: grafana/grafana

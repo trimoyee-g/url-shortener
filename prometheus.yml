@@ -4,3 +4,8 @@ scrape_configs:
     scrape_interval: 5s
     static_configs:
       - targets: ['host.docker.internal:8080']
+
+  # k6 pushes metrics via remote-write (no scrape needed).
+  # This empty placeholder job makes k6 metrics discoverable under
+  # job="k6" in Grafana when you filter by label.
+  # Actual ingestion is handled by --web.enable-remote-write-receiver above.
