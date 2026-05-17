@@ -53,7 +53,11 @@ React Frontend
       │ POST /api/v1/urls/shorten  (JWT auth · rate limiter)
       ▼
 Spring Boot API
-      │ Snowflake ID + Base62 → shortCode
+      │
+      ├─ Idempotency check (MySQL): has this user already shortened this URL?
+      │        │ YES → return existing short code
+      │        │ NO
+      │  Snowflake ID + Base62 → shortCode
       │
       ├──────────────────────────────────┐
       │ async                            │ sync (immediate readability)
@@ -123,16 +127,17 @@ Spring Boot (Micrometer) → Prometheus → Grafana
 
 Load tested with k6 at 500 concurrent users over 10 minutes:
 
-| Metric | Result |
-|---|---|
-| Redirect P95 latency | 19.71ms |
-| Redirect P99 latency | 70.07ms |
-| Redirect success rate | 99.87% |
-| Shorten P95 latency | 35.93ms |
-| Shorten success rate | 100% |
-| Peak throughput | 462 req/s |
+| Metric                | Result    |
+|-----------------------|-----------|
+| Redirect P95 latency  | 15.82ms   |
+| Redirect P99 latency  | 35.04ms   |
+| Redirect success rate | 100%      |
+| Shorten P95 latency   | 47.41ms   |
+| Shorten P99 latency   | 118.1ms   |
+| Shorten success rate  | 100%      |
+| Peak throughput       | 563 req/s |
 
-Metrics tracked live via Prometheus and Grafana during the test. Rate limiter correctly absorbed 80,804 burst requests (429s) without affecting the error rate threshold.
+Metrics tracked live via Prometheus and Grafana during the test. Rate limiter correctly absorbed 85,390 burst requests (429s) without affecting the error rate threshold.
 
 ---
 
