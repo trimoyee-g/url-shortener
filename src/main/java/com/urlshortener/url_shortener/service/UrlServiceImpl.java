@@ -144,7 +144,14 @@ public class UrlServiceImpl implements UrlService {
     public String resolve(String shortCode) {
         Timer.Sample sample = Timer.start(meterRegistry);
 
-        // 1. Cache lookup
+        // 1. Bloom Filter guard — non-existent codes are rejected in microseconds,
+        //    before Redis or MySQL are ever touched
+        if (!bloomFilter.mightContain(shortCode)) {
+            redirectFailedCounter.increment();
+            throw new UrlNotFoundException(shortCode);
+        }
+
+        // 2. Cache lookup — only reached when code might exist
         String cached = redisTemplate.opsForValue().get(cacheKey(shortCode));
         if (cached != null) {
             cacheHitCounter.increment();
@@ -154,12 +161,6 @@ public class UrlServiceImpl implements UrlService {
         }
 
         cacheMissCounter.increment();
-
-        // 2. Bloom Filter Guard (Distributed Check)
-        if (!bloomFilter.mightContain(shortCode)) {
-            redirectFailedCounter.increment();
-            throw new UrlNotFoundException(shortCode);
-        }
 
         // 3. Database lookup
         Url url = urlRepository.findByShortCodeAndActiveTrue(shortCode)
