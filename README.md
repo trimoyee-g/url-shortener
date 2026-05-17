@@ -1,166 +1,112 @@
-# 🚀 URL Shortener
+<div align="center">
 
-A scalable, production-oriented **URL Shortener Platform** built using **Spring Boot, React, Redis, Kafka, MySQL, Docker, Prometheus, and Grafana**.  
-Designed to support **high-throughput URL generation, ultra-fast redirects, asynchronous analytics processing, and resilient distributed caching**.
+# URL Shortener
 
----
+**High-throughput URL shortening with sub-millisecond redirects, distributed rate limiting, and full observability.**
 
-# ✨ Features
+A production-oriented URL shortener built with Java, Spring Boot, React, Redis, Kafka, MySQL, Docker, Prometheus, and Grafana. Designed for high-concurrency URL generation, ultra-fast cached redirects, asynchronous analytics, and resilient distributed caching.
 
-## 🔗 High-Speed URL Shortening
+[![Java](https://img.shields.io/badge/Java-17-orange?style=flat-square&logo=openjdk)](https://openjdk.org/projects/jdk/17/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.3-green?style=flat-square&logo=springboot)](https://spring.io/projects/spring-boot)
+[![React](https://img.shields.io/badge/React-18-blue?style=flat-square&logo=react)](https://react.dev)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
-- Distributed unique ID generation using **Snowflake Algorithm**
-- Compact short links using **Base62 Encoding**
-- Optimized for high concurrency and low collision probability
-- Supports extremely fast redirect resolution
-
----
-
-## ⚡ Multi-Layer Caching Architecture
-
-- **Bloom Filter** pre-screens every request — blocks non-existent key lookups before they reach Redis or MySQL (cache penetration protection).
-- **Redis-first** on every redirect — cache hit returns instantly, no DB touch, sub-10ms latency.
-- **Cache-aside** on miss — queries MySQL, writes result back to Redis for subsequent requests.
-- **Write-through** on URL creation — Redis and Bloom Filter updated immediately after Kafka publish, no stale reads.
+</div>
 
 ---
 
-## 📊 Event-Driven Analytics Pipeline
+## Table of Contents
 
-- Kafka-based asynchronous event streaming
-- URL creation and click analytics handled independently
-- Decouples critical request paths from slow I/O operations
-- Improves scalability and resilience under load
-
----
-
-## 🚦 Distributed Rate Limiting
-
-- **Leaky bucket** algorithm implemented via **Redis Lua scripts** — atomic execution across all instances, no race conditions.
-- Rate limits enforced per **IP and email** — 20 requests per 60s window.
-- Protects against DDoS, abusive traffic bursts, and excessive scraping.
-
----
-
-## 🖥️ Frontend Dashboard
-
-- Built with **React + Vite + Material UI**
-- Dark terminal-inspired design
-- Full authentication flow (register / login)
-- URL shortening with optional custom alias and TTL
-- Dashboard table with copy-to-clipboard
-- Per-URL analytics with country breakdown and clicks-by-day bar chart
-- QR code generation and PNG download
-- JWT-based session management
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Performance](#performance)
+- [Caching Strategy](#caching-strategy)
+- [Rate Limiting](#rate-limiting)
+- [Analytics Pipeline](#analytics-pipeline)
+- [Testing Strategy](#testing-strategy)
+- [Observability](#observability)
+- [Key Design Decisions](#key-design-decisions)
+- [API Reference](#api-reference)
+- [Getting Started](#getting-started)
 
 ---
 
-# 🧪 Testing Strategy
+## Overview
 
-This project follows the **Testing Pyramid** approach to ensure fast feedback, high confidence, and production reliability.
+A URL shortener built to handle real production load — not just a CRUD app. Key design goals:
 
-```text
-                    ┌──────────────────────┐
-                    │      E2E Tests       │
-                    │  Full HTTP flows     │
-                    │ RestAssured + Docker │
-                    └──────────────────────┘
-                               ▲
-                    ┌──────────────────────┐
-                    │  Integration Tests   │
-                    │ Spring + Redis + DB  │
-                    │ Kafka + Testcontainers│
-                    └──────────────────────┘
-                               ▲
-                    ┌──────────────────────┐
-                    │     Unit Tests       │
-                    │ Services / Controllers│
-                    │ Repositories / Utils │
-                    └──────────────────────┘
+- **Sub-millisecond redirects** via Redis-first caching with Bloom Filter cache penetration protection
+- **Asynchronous write path** — Kafka decouples URL creation from database persistence, eliminating write-path latency
+- **Distributed rate limiting** — leaky bucket via Redis Lua scripts, enforced atomically across all instances
+- **Full observability** — Prometheus and Grafana tracking P95/P99 latencies, cache hit ratios, and Kafka consumer lag
+- **Load tested** — verified at 500 concurrent users, 462 req/s, sub-20ms P95 redirect latency
+
+---
+
+## Architecture
+
+### Write Path — URL Shortening
+
 ```
-
-### ✅ Unit Tests
-- Fast isolated testing of:
-    - Services
-    - Controllers
-    - Repositories
-    - JWT logic
-    - Base62 encoder
-    - Snowflake ID generator
-    - Rate limiter logic
-- Uses Mockito for dependency isolation
-
-### ✅ Integration Tests
-- Verifies interaction between:
-    - Spring Boot
-    - MySQL
-    - Redis
-    - Kafka
-- Uses:
-    - Testcontainers
-    - MockMvc
-    - Awaitility
-- Validates async event-driven workflows
-
-### ✅ End-to-End (E2E) Tests
-- Full black-box API testing using:
-    - RestAssured
-    - Real HTTP requests
-    - Full security chain
-    - Real infrastructure
-- Tests complete production-like user flows:
-    - Authentication
-    - URL shortening
-    - Redirects
-    - Analytics
-    - Authorization
-
-### ✅ Test Infrastructure
-- Testcontainers-based isolated test environments
-- Production-like Dockerized testing setup
-- Automated container lifecycle management
-
----
-
-## 📈 Observability & Monitoring
-
-Integrated monitoring stack using:
-
-- Prometheus
-- Grafana
-
-Tracks:
-- Request throughput
-- P95 / P99 latency
-- Kafka consumer lag
-- Cache hit ratio
-- Redis performance metrics
-
----
-
-# 🏗️ Architecture Overview
-
-```text
-React Frontend (Vite + MUI)
-   ↓
+React Frontend
+      │ POST /api/v1/urls/shorten  (JWT auth · rate limiter)
+      ▼
 Spring Boot API
-   ↓
-Redis Cache / Bloom Filter
-   ↓
-Kafka Event Stream
-   ↓
-MySQL Persistence Layer
-   ↓
-Analytics Pipeline
+      │ Snowflake ID + Base62 → shortCode
+      │
+      ├──────────────────────────────────┐
+      │ async                            │ sync (immediate readability)
+      ▼                                  ▼
+Kafka [url-creations]          Redis (URL cache)
+      │                      + Bloom Filter (stored in Redis)
+      ▼ async
+UrlCreateConsumer
+      ├─→ MySQL   (persist URL record)
+      ├─→ Redis   (cache URL)
+      └─→ Bloom Filter (add short code)
+```
+
+### Read Path — Redirect
+
+```
+Client  GET /{shortCode}
+           │
+           ▼
+     Spring Boot API
+           │
+           ├─ 1. Bloom Filter ──── NOT IN FILTER → 404
+           │        │ MIGHT EXIST
+           ├─ 2. Redis cache ──────────────────────── HIT → 302 Redirect
+           │        │ MISS
+           └─ 3. MySQL → repopulate Redis ──────────────── 302 Redirect
+           │
+           │ (non-blocking)
+           ▼
+     GeoIP lookup (MaxMind)
+           │
+           ▼
+     Kafka [url-clicks]
+           │ async
+           ▼
+     AnalyticsConsumer
+           ├─→ MySQL   (persist ClickEvent)
+           └─→ Redis   (increment click counter)
+```
+
+### Observability
+
+```
+Spring Boot (Micrometer) → Prometheus → Grafana
 ```
 
 ---
 
-# ⚙️ Tech Stack
+## Tech Stack
 
 | Category | Technologies |
 |---|---|
-| Frontend | React 18, Vite, Material UI, Lucide Icons |
+| Frontend | React 18, Vite, Material UI |
 | Backend | Java 17, Spring Boot |
 | Security | Spring Security, JWT |
 | Database | MySQL |
@@ -168,38 +114,154 @@ Analytics Pipeline
 | Messaging | Apache Kafka (KRaft) |
 | Monitoring | Prometheus, Grafana |
 | Containerization | Docker, Docker Compose |
-| Testing | JUnit 5, MockMvc, RestAssured, Testcontainers, Awaitility |
-| Build Tool | Maven |
+| Testing | JUnit 5, Mockito, RestAssured, Testcontainers, Awaitility |
+| Build | Maven |
 
 ---
 
-# 🧠 Core System Design Concepts
+## Performance
 
-- Snowflake Distributed ID Generation
-- Base62 Encoding
-- Bloom Filter Optimization
-- Cache-aside Caching
-- Write-through Caching
-- Event-Driven Architecture
-- Hot-path Optimization
-- Distributed Rate Limiting
-- Asynchronous Analytics Processing
-- Containerized Integration Testing
+Load tested with k6 at 500 concurrent users over 10 minutes:
+
+| Metric | Result |
+|---|---|
+| Redirect P95 latency | 19.71ms |
+| Redirect P99 latency | 70.07ms |
+| Redirect success rate | 99.87% |
+| Shorten P95 latency | 35.93ms |
+| Shorten success rate | 100% |
+| Peak throughput | 462 req/s |
+
+Metrics tracked live via Prometheus and Grafana during the test. Rate limiter correctly absorbed 80,804 burst requests (429s) without affecting the error rate threshold.
 
 ---
 
-# 🚀 Getting Started
+## Caching Strategy
 
-## 1️⃣ Clone the Repository
+Multi-layer caching architecture optimised for the redirect hot path:
+
+**Bloom Filter first** — every redirect checks the Bloom Filter before touching Redis or MySQL. A short code that has never existed is rejected in microseconds (cache penetration protection). Only codes that might exist proceed further.
+
+**Redis cache** — on a Bloom Filter pass, Redis is checked next. A cache hit returns instantly with no DB touch, achieving sub-millisecond lookup on warm keys.
+
+**Cache-aside** on miss — queries MySQL, writes result back to Redis for subsequent requests.
+
+**Write-through** on URL creation — Redis and Bloom Filter updated immediately after Kafka publish, ensuring no stale reads on newly created URLs.
+
+---
+
+## Rate Limiting
+
+Distributed leaky bucket algorithm implemented via Redis Lua scripts — atomic execution across all instances with no race conditions.
+
+- Rate limit: 20 requests per 60-second window
+- Enforced per IP address and per user email independently
+- Protects against DDoS, abusive traffic bursts, and excessive scraping
+- 429 responses are counted separately in observability and excluded from error rate thresholds
+
+---
+
+## Analytics Pipeline
+
+Kafka-based asynchronous event streaming decouples analytics from the critical request path:
+
+- URL creation events published to Kafka immediately on request
+- Click events streamed asynchronously — redirect latency is never blocked by analytics writes
+- Consumer group processes events independently, providing resilience under load
+- Per-URL click counts, geographic breakdown, and clicks-by-day tracked in the dashboard
+
+---
+
+## Testing Strategy
+
+Follows the testing pyramid with three layers:
+
+**Unit tests** — isolated testing of services, controllers, repositories, JWT logic, Base62 encoder, Snowflake ID generator, and rate limiter logic using JUnit 5 and Mockito.
+
+**Integration tests** — verifies interaction between Spring Boot, MySQL, Redis, and Kafka using Testcontainers, MockMvc, and Awaitility. Validates async event-driven workflows end-to-end.
+
+**End-to-end tests** — full black-box API testing via RestAssured against real infrastructure. Covers authentication, URL shortening, redirects, analytics, and authorization flows.
+
+---
+
+## Observability
+
+Prometheus and Grafana provide full-stack visibility:
+
+- Request throughput and error rates
+- P95/P99 latency per endpoint
+- Kafka consumer lag
+- Redis cache hit ratio
+- Redis performance metrics
+
+Grafana available at `http://localhost:3000` (default: admin/admin).
+
+---
+
+## Key Design Decisions
+
+**Snowflake ID + Base62 encoding** — Snowflake generates distributed unique 64-bit IDs without coordination. Base62 encoding produces compact 7–10 character short codes with negligible collision probability at scale.
+
+**Kafka for write-path decoupling** — URL creation publishes to Kafka and returns immediately. The database consumer processes asynchronously, eliminating write-path latency from the user-facing response time.
+
+**Redis Lua scripts for rate limiting** — Lua scripts execute atomically on Redis, ensuring the leaky bucket counter check-and-decrement is a single operation with no race conditions across instances.
+
+**Bloom Filter before Redis** — a non-existent short code lookup (e.g. a bot scanning random codes) would cause a Redis miss and a MySQL query on every request. The Bloom Filter catches these at near-zero cost before they touch any data store.
+
+---
+
+## API Reference
+
+### Authentication
+
+```
+POST /api/v1/auth/register
+POST /api/v1/auth/login
+```
+
+### URL management
+
+```
+POST   /api/v1/urls/shorten
+GET    /api/v1/urls
+DELETE /api/v1/urls/{shortCode}
+```
+
+### Redirect
+
+```
+GET /{shortCode}
+```
+
+### Analytics
+
+```
+GET /api/v1/urls/{shortCode}/stats
+```
+
+### QR code
+
+```
+GET /api/v1/urls/{shortCode}/qr?size=300
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Docker and Docker Compose
+- Node.js (for frontend)
+
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/trimoyee-g/url-shortener.git
 cd url-shortener
 ```
 
----
-
-## 2️⃣ Configure Environment Variables
+### 2. Configure environment variables
 
 Create a `.env` file in the project root:
 
@@ -207,38 +269,22 @@ Create a `.env` file in the project root:
 DB_URL=jdbc:mysql://mysql:3306/url_shortener
 DB_USERNAME=appuser
 DB_PASSWORD=apppassword
-
 MYSQL_ROOT_PASSWORD=your_password
-
 JWT_SECRET=your_secret
-
 REDIS_HOST=redis
 REDIS_PORT=6379
-
 KAFKA_SERVERS=kafka:9092
 ```
 
----
-
-## 3️⃣ Start the Infrastructure
+### 3. Start the stack
 
 ```bash
 docker compose up -d
 ```
 
-Docker Compose will automatically:
+Starts MySQL, Redis, Kafka, Prometheus, Grafana, and the Spring Boot backend automatically.
 
-- Pull the backend image from Docker Hub
-- Start MySQL
-- Start Redis
-- Start Kafka
-- Start Prometheus
-- Start Grafana
-- Start the Spring Boot application
-- 
----
-
-## 5️⃣ Run the Frontend
+### 4. Run the frontend
 
 ```bash
 cd url-shortener-ui
@@ -246,28 +292,15 @@ npm install
 npm run dev
 ```
 
-The frontend will be available at `http://localhost:5173` and connects to the backend at `http://localhost:8080`.
+Frontend available at `http://localhost:5173`, backend at `http://localhost:8080`.
 
----
-
-# 🐳 Docker Hub Image
+### Docker Hub
 
 ```bash
 docker pull trimoyeeg/url-shortener:v3
 ```
 
----
-
-# 🔄 Updating to Latest Images
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
----
-
-# 🛑 Stopping the Application
+### Stopping
 
 ```bash
 docker compose down
@@ -275,105 +308,17 @@ docker compose down
 
 ---
 
-# 📡 API Endpoints
+## Contributing
 
-## 🔐 Authentication
+1. Fork the repo
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Commit your changes
+4. Push and open a pull request
 
-```http
-POST /api/v1/auth/register
-POST /api/v1/auth/login
-```
-
----
-
-## 🔗 URL Management
-
-```http
-POST   /api/v1/urls/shorten
-GET    /api/v1/urls
-DELETE /api/v1/urls/{shortCode}
-```
+Please add unit tests for any new service-layer logic.
 
 ---
 
-## 🔁 Redirect
-
-```http
-GET /{shortCode}
-```
-
----
-
-## 📊 Analytics
-
-```http
-GET /api/v1/urls/{shortCode}/stats
-```
-
----
-
-## 📷 QR Code Generation
-
-```http
-GET /api/v1/urls/{shortCode}/qr?size=300
-```
-
----
-
-# 📈 Performance Characteristics
-
-- Redis-first O(1) redirect lookups
-- Bloom filter optimized invalid request handling
-- Kafka-based asynchronous processing
-- Distributed Snowflake ID generation
-- Low-latency redirect pipeline
-- Horizontally scalable architecture
-
----
-
-# 🐳 Dockerized Services
-
-| Container | Purpose |
-|---|---|
-| `mysql` | Primary data store |
-| `redis` | Cache + rate limiting + click counters |
-| `kafka` | Async event streaming |
-| `prometheus` | Metrics collection |
-| `grafana` | Metrics visualization |
-| `app` | Spring Boot backend (prod profile only) |
-
----
-
-# 🔮 Future Enhancements
-
-- Multi-region deployment
-- CDN-backed redirects
-- Advanced fraud detection
-
----
-
-# 👩‍💻 Author
-
-Trimoyee Ghosh
-
----
-
-# 🤝 Contributing
-
-Contributions, issues, and feature requests are welcome.
-
-If you'd like to contribute:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Open a Pull Request
-
----
-
-# ⭐ Support
-
-If you found this project useful, consider:
-- Starring the repository
-- Forking the project
-- Opening issues for bugs or feature requests
+<div align="center">
+Built for speed, designed for resilience.
+</div>
