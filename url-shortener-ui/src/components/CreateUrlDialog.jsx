@@ -15,25 +15,41 @@ import {
 import { Plus, Link, Calendar, Zap } from "lucide-react";
 import { api } from "../services/api";
 
+function validateUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export default function CreateUrlDialog({ open, onClose, token, onCreated }) {
   const [longUrl, setLongUrl] = useState("");
   const [alias, setAlias] = useState("");
   const [ttl, setTtl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [urlError, setUrlError] = useState("");
 
   const reset = () => {
     setLongUrl("");
     setAlias("");
     setTtl("");
     setError("");
+    setUrlError("");
   };
 
   const submit = async () => {
-    if (!longUrl) {
-      setError("URL is required");
+    if (!longUrl.trim()) {
+      setUrlError("URL is required");
       return;
     }
+    if (!validateUrl(longUrl.trim())) {
+      setUrlError("Enter a valid URL starting with http:// or https://");
+      return;
+    }
+    setUrlError("");
     setLoading(true);
     setError("");
     try {
@@ -89,9 +105,14 @@ export default function CreateUrlDialog({ open, onClose, token, onCreated }) {
           <TextField
             label="Long URL *"
             value={longUrl}
-            onChange={(e) => setLongUrl(e.target.value)}
+            onChange={(e) => {
+              setLongUrl(e.target.value);
+              if (urlError) setUrlError("");
+            }}
             fullWidth
             placeholder="https://example.com/very/long/url"
+            error={Boolean(urlError)}
+            helperText={urlError}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">

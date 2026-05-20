@@ -12,8 +12,33 @@ import {
   CircularProgress,
   Fade,
 } from "@mui/material";
-import { Zap, ArrowRight, Shield } from "lucide-react"; // Import your icons
-import { api } from "../services/api"; // Import the API layer we created
+import { Zap, ArrowRight, Shield } from "lucide-react";
+import { api } from "../services/api";
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function getPasswordError(password) {
+  if (!password) return "Password is required";
+  if (password.length < 8) return "Use at least 8 characters";
+  if (!/[A-Z]/.test(password)) return "Include at least one uppercase letter";
+  if (!/[a-z]/.test(password)) return "Include at least one lowercase letter";
+  if (!/[0-9]/.test(password)) return "Include at least one number";
+  if (!/[^A-Za-z0-9]/.test(password)) return "Include at least one special character (e.g. !@#$%)";
+  return "";
+}
+
+function validate(tab, email, password, name) {
+  const errors = {};
+  if (tab === 1 && !name.trim()) errors.name = "Name is required";
+  if (!email.trim()) {
+    errors.email = "Email is required";
+  } else if (!emailRegex.test(email)) {
+    errors.email = "Enter a valid email address";
+  }
+  const pwErr = tab === 1 ? getPasswordError(password) : (!password ? "Password is required" : "");
+  if (pwErr) errors.password = pwErr;
+  return errors;
+}
 
 export default function AuthPage({ onAuth }) {
   const [tab, setTab] = useState(0);
@@ -21,21 +46,32 @@ export default function AuthPage({ onAuth }) {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [apiError, setApiError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
+
+  const handleTabChange = (_, v) => {
+    setTab(v);
+    setApiError("");
+    setFieldErrors({});
+  };
 
   const submit = async () => {
-    setError("");
+    setApiError("");
+    const errors = validate(tab, email, password, name);
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
+    setFieldErrors({});
     setLoading(true);
     try {
       const data =
         tab === 0
           ? await api.login(email, password)
           : await api.register(email, password, name);
-
-      // Note: Check if your API returns 'accessToken' or just 'token'
       onAuth(data.accessToken || data.token);
     } catch (e) {
-      setError(e.message);
+      setApiError(e.message);
     } finally {
       setLoading(false);
     }
@@ -119,10 +155,7 @@ export default function AuthPage({ onAuth }) {
           >
             <Tabs
               value={tab}
-              onChange={(_, v) => {
-                setTab(v);
-                setError("");
-              }}
+              onChange={handleTabChange}
               sx={{
                 mb: 3,
                 "& .MuiTab-root": {
@@ -143,30 +176,48 @@ export default function AuthPage({ onAuth }) {
                 <TextField
                   label="Name"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (fieldErrors.name) setFieldErrors((p) => ({ ...p, name: "" }));
+                  }}
                   fullWidth
                   size="small"
+                  error={Boolean(fieldErrors.name)}
+                  helperText={fieldErrors.name}
                 />
               )}
               <TextField
                 label="Email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: "" }));
+                }}
                 fullWidth
                 size="small"
+                error={Boolean(fieldErrors.email)}
+                helperText={fieldErrors.email}
               />
               <TextField
                 label="Password"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: "" }));
+                }}
                 fullWidth
                 size="small"
                 onKeyDown={(e) => e.key === "Enter" && submit()}
+                error={Boolean(fieldErrors.password)}
+                helperText={
+                  fieldErrors.password ||
+                  (tab === 1 ? "8+ chars, upper & lowercase, number, special char" : "")
+                }
               />
 
-              {error && (
+              {apiError && (
                 <Alert
                   severity="error"
                   sx={{
@@ -174,7 +225,7 @@ export default function AuthPage({ onAuth }) {
                     fontFamily: "'IBM Plex Mono', monospace",
                   }}
                 >
-                  {error}
+                  {apiError}
                 </Alert>
               )}
 
