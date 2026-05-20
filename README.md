@@ -125,19 +125,47 @@ Spring Boot (Micrometer) → Prometheus → Grafana
 
 ## Performance
 
-Load tested with k6 at 500 concurrent users over 10 minutes:
+### Baseline Load Test
 
-| Metric                | Result    |
-|-----------------------|-----------|
-| Redirect P95 latency  | 15.82ms   |
-| Redirect P99 latency  | 35.04ms   |
-| Redirect success rate | 100%      |
-| Shorten P95 latency   | 47.41ms   |
-| Shorten P99 latency   | 118.1ms   |
-| Shorten success rate  | 100%      |
-| Peak throughput       | 563 req/s |
+Load tested using k6 with 1,000 concurrent virtual users  
+(500 redirect readers + 500 authenticated writers) over 10 minutes.
 
-Metrics tracked live via Prometheus and Grafana during the test. Rate limiter correctly absorbed 85,390 burst requests (429s) without affecting the error rate threshold.
+| Metric | Result |
+|---|---|
+| Redirect P95 latency | 56.89ms |
+| Redirect P99 latency | 119.68ms |
+| Redirect success rate | 100% |
+| Shorten P95 latency | 445.53ms |
+| Shorten P99 latency | 1.14s |
+| Shorten success rate | 100% |
+| Peak throughput | 541 req/s |
+| Total requests served | 380K+ |
+| Rate-limited requests absorbed | 78,534 |
+
+Metrics were tracked live using Prometheus and Grafana during the test.  
+The distributed rate limiter successfully absorbed burst traffic (HTTP 429 responses) without affecting system stability or request success rates.
+
+---
+
+### Stress Test
+
+Stress tested using k6 with 1,500 concurrent virtual users  
+(1,000 redirect readers + 500 authenticated writers) over 17 minutes.
+
+| Metric | Result |
+|---|---|
+| Redirect P95 latency | 160.34ms |
+| Redirect P99 latency | 298.04ms |
+| Redirect success rate | 100% |
+| Shorten P95 latency | 812.4ms |
+| Shorten P99 latency | 1.53s |
+| Shorten success rate | 99.14% |
+| Peak throughput | 1232 req/s |
+| Total requests served | 1.25M+ |
+| Rate-limited requests absorbed | 137,690 |
+
+Metrics were tracked live using Prometheus and Grafana throughout the stress test.  
+The distributed rate limiter successfully absorbed high burst traffic (HTTP 429 responses) without destabilizing the system under sustained load.
 
 ---
 
