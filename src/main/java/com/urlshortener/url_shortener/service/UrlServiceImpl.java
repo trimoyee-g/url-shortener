@@ -10,7 +10,7 @@ import com.urlshortener.url_shortener.exception.UrlNotFoundException;
 import com.urlshortener.url_shortener.repository.UrlRepository;
 import com.urlshortener.url_shortener.repository.UserRepository;
 import com.urlshortener.url_shortener.util.Base62Encoder;
-import com.urlshortener.url_shortener.util.UrlBloomFilter;
+import com.urlshortener.url_shortener.util.UrlCuckooFilter;
 import com.urlshortener.url_shortener.util.SnowflakeIdGenerator;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -45,7 +45,7 @@ public class UrlServiceImpl implements UrlService {
     private final RedisTemplate<String, String> redisTemplate;
     private final Base62Encoder base62Encoder;
     private final SnowflakeIdGenerator idGenerator;
-    private final UrlBloomFilter bloomFilter;
+    private final UrlCuckooFilter cuckooFilter;
     private final UrlCreateProducer urlCreateProducer;
     private final MeterRegistry meterRegistry;
     private final RateLimiterService rateLimiterService;
@@ -132,7 +132,7 @@ public class UrlServiceImpl implements UrlService {
 
         // Make immediately resolvable without waiting for Kafka consumer
         cacheUrl(shortCode, normalizedUrl, expiresAt);  // Redis cache
-        bloomFilter.add(shortCode);                      // Bloom Filter
+        cuckooFilter.add(shortCode);                    // Cuckoo Filter
 
         log.info("Published short URL create event: {} -> {}", shortCode, url.getLongUrl());
         return toResponse(url);
@@ -144,9 +144,9 @@ public class UrlServiceImpl implements UrlService {
     public String resolve(String shortCode) {
         Timer.Sample sample = Timer.start(meterRegistry);
 
-        // 1. Bloom Filter guard — non-existent codes are rejected in microseconds,
+        // 1. Cuckoo Filter guard — non-existent codes are rejected in microseconds,
         //    before Redis or MySQL are ever touched
-        if (!bloomFilter.mightContain(shortCode)) {
+        if (!cuckooFilter.mightContain(shortCode)) {
             redirectFailedCounter.increment();
             throw new UrlNotFoundException(shortCode);
         }
@@ -200,6 +200,7 @@ public class UrlServiceImpl implements UrlService {
         urlRepository.save(url);
 
         redisTemplate.delete(cacheKey(shortCode));
+        cuckooFilter.delete(shortCode);
         log.info("Deleted short URL: {}", shortCode);
     }
 

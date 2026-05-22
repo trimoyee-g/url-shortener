@@ -5,7 +5,7 @@ import com.urlshortener.url_shortener.entity.Url;
 import com.urlshortener.url_shortener.entity.User;
 import com.urlshortener.url_shortener.repository.UrlRepository;
 import com.urlshortener.url_shortener.repository.UserRepository;
-import com.urlshortener.url_shortener.util.UrlBloomFilter;
+import com.urlshortener.url_shortener.util.UrlCuckooFilter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,7 +23,7 @@ public class UrlCreateConsumer {
 
     private final UrlRepository urlRepository;
     private final UserRepository userRepository;
-    private final UrlBloomFilter bloomFilter;
+    private final UrlCuckooFilter cuckooFilter;
     private final RedisTemplate<String, String> redisTemplate;
 
     @Value("${app.cache.url-ttl-seconds:86400}")
@@ -48,8 +48,8 @@ public class UrlCreateConsumer {
 
             urlRepository.save(url);
 
-            // Add to bloom filter
-            bloomFilter.add(evt.getShortCode());
+            // Add to cuckoo filter
+            cuckooFilter.add(evt.getShortCode());
 
             // Cache value
             long ttl = cacheTtlSeconds;
