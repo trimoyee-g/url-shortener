@@ -1,11 +1,18 @@
+# prometheus.yml
+global:
+  scrape_interval: 15s
+
 scrape_configs:
-  - job_name: 'spring-boot-app'
+  - job_name: 'url-shortener'
     metrics_path: '/actuator/prometheus'
     scrape_interval: 5s
     static_configs:
-      - targets: ['host.docker.internal:8080']
+      - targets: ['app:8080']
 
   # k6 pushes metrics via remote-write (no scrape needed).
   # This empty placeholder job makes k6 metrics discoverable under
   # job="k6" in Grafana when you filter by label.
   # Actual ingestion is handled by --web.enable-remote-write-receiver above.
+  - job_name: 'k6'
+    static_configs:
+      - targets: []
