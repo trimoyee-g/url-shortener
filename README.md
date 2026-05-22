@@ -36,7 +36,7 @@ A production-oriented URL shortener built with Java, Spring Boot, React, Redis, 
 
 A URL shortener built to handle real production load — not just a CRUD app. Key design goals:
 
-- **Sub-millisecond redirects** via Redis-first caching with Bloom Filter cache penetration protection
+- **Sub-millisecond redirects** via Redis-first caching with Cuckoo Filter cache penetration protection
 - **Asynchronous write path** — Kafka decouples URL creation from database persistence, eliminating write-path latency
 - **Distributed rate limiting** — leaky bucket via Redis Lua scripts, enforced atomically across all instances
 - **Full observability** — Prometheus and Grafana tracking P95/P99 latencies, cache hit ratios, and Kafka consumer lag
@@ -63,12 +63,12 @@ Spring Boot API
       │ async                            │ sync (immediate readability)
       ▼                                  ▼
 Kafka [url-creations]          Redis (URL cache)
-      │                      + Bloom Filter (stored in Redis)
+      │                      + Cuckoo Filter (stored in Redis Stack)
       ▼ async
 UrlCreateConsumer
-      ├─→ MySQL   (persist URL record)
-      ├─→ Redis   (cache URL)
-      └─→ Bloom Filter (add short code)
+      ├─→ MySQL         (persist URL record)
+      ├─→ Redis         (cache URL)
+      └─→ Cuckoo Filter (add short code)
 ```
 
 ### Read Path — Redirect
@@ -79,7 +79,7 @@ Client  GET /{shortCode}
            ▼
      Spring Boot API
            │
-           ├─ 1. Bloom Filter ──── NOT IN FILTER → 404
+           ├─ 1. Cuckoo Filter ── NOT IN FILTER → 404
            │        │ MIGHT EXIST
            ├─ 2. Redis cache ──────────────────────── HIT → 302 Redirect
            │        │ MISS
@@ -98,6 +98,18 @@ Client  GET /{shortCode}
            └─→ Redis   (increment click counter)
 ```
 
+### Delete Path — URL Deletion
+
+```
+DELETE /api/v1/urls/{shortCode}
+      │
+      ▼
+Spring Boot API
+      ├─→ MySQL         (set active = false)
+      ├─→ Redis         (evict cache entry)
+      └─→ Cuckoo Filter (CF.DEL — remove fingerprint)
+```
+
 ### Observability
 
 ```
@@ -114,7 +126,7 @@ Spring Boot (Micrometer) → Prometheus → Grafana
 | Backend | Java 17, Spring Boot |
 | Security | Spring Security, JWT |
 | Database | MySQL |
-| Caching | Redis, Redisson |
+| Caching | Redis Stack (Cuckoo Filter via CF commands) |
 | Messaging | Apache Kafka (KRaft) |
 | Monitoring | Prometheus, Grafana |
 | Containerization | Docker, Docker Compose |
@@ -130,17 +142,17 @@ Spring Boot (Micrometer) → Prometheus → Grafana
 Load tested using k6 with 1,000 concurrent virtual users  
 (500 redirect readers + 500 authenticated writers) over 10 minutes.
 
-| Metric | Result |
-|---|---|
-| Redirect P95 latency | 56.89ms |
-| Redirect P99 latency | 119.68ms |
-| Redirect success rate | 100% |
-| Shorten P95 latency | 445.53ms |
-| Shorten P99 latency | 1.14s |
-| Shorten success rate | 100% |
-| Peak throughput | 541 req/s |
-| Total requests served | 380K+ |
-| Rate-limited requests absorbed | 78,534 |
+| Metric | Result    |
+|---|-----------|
+| Redirect P95 latency | 56.89ms   |
+| Redirect P99 latency | 119.68ms  |
+| Redirect success rate | 100%      |
+| Shorten P95 latency | 445.53ms  |
+| Shorten P99 latency | 885.43s   |
+| Shorten success rate | 100%      |
+| Peak throughput | 546 req/s |
+| Total requests served | 380K+     |
+| Rate-limited requests absorbed | 78,534    |
 
 Metrics were tracked live using Prometheus and Grafana during the test.  
 The distributed rate limiter successfully absorbed burst traffic (HTTP 429 responses) without affecting system stability or request success rates.
@@ -152,17 +164,17 @@ The distributed rate limiter successfully absorbed burst traffic (HTTP 429 respo
 Stress tested using k6 with 1,500 concurrent virtual users  
 (1,000 redirect readers + 500 authenticated writers) over 17 minutes.
 
-| Metric | Result |
-|---|---|
-| Redirect P95 latency | 160.34ms |
-| Redirect P99 latency | 298.04ms |
-| Redirect success rate | 100% |
-| Shorten P95 latency | 812.4ms |
-| Shorten P99 latency | 1.53s |
-| Shorten success rate | 99.14% |
+| Metric | Result     |
+|---|------------|
+| Redirect P95 latency | 138.05ms   |
+| Redirect P99 latency | 227.91ms   |
+| Redirect success rate | 100%       |
+| Shorten P95 latency | 812.4ms    |
+| Shorten P99 latency | 1.29s      |
+| Shorten success rate | 99.71%     |
 | Peak throughput | 1232 req/s |
-| Total requests served | 1.25M+ |
-| Rate-limited requests absorbed | 137,690 |
+| Total requests served | 1.25M+     |
+| Rate-limited requests absorbed | 137,690    |
 
 Metrics were tracked live using Prometheus and Grafana throughout the stress test.  
 The distributed rate limiter successfully absorbed high burst traffic (HTTP 429 responses) without destabilizing the system under sustained load.
@@ -173,13 +185,15 @@ The distributed rate limiter successfully absorbed high burst traffic (HTTP 429 
 
 Multi-layer caching architecture optimised for the redirect hot path:
 
-**Bloom Filter first** — every redirect checks the Bloom Filter before touching Redis or MySQL. A short code that has never existed is rejected in microseconds (cache penetration protection). Only codes that might exist proceed further.
+**Cuckoo Filter first** — every redirect checks the Cuckoo Filter before touching Redis or MySQL. A short code that has never existed is rejected in microseconds (cache penetration protection). Only codes that might exist proceed further.
 
-**Redis cache** — on a Bloom Filter pass, Redis is checked next. A cache hit returns instantly with no DB touch, achieving sub-millisecond lookup on warm keys.
+Unlike a Bloom Filter, the Cuckoo Filter supports deletion. When a URL is deleted or expires, its fingerprint is removed from the filter via `CF.DEL`, preventing the false-positive rate from climbing over time as codes are recycled or purged.
+
+**Redis cache** — on a Cuckoo Filter pass, Redis is checked next. A cache hit returns instantly with no DB touch, achieving sub-millisecond lookup on warm keys.
 
 **Cache-aside** on miss — queries MySQL, writes result back to Redis for subsequent requests.
 
-**Write-through** on URL creation — Redis and Bloom Filter updated immediately after Kafka publish, ensuring no stale reads on newly created URLs.
+**Write-through** on URL creation — Redis and Cuckoo Filter updated immediately after Kafka publish, ensuring no stale reads on newly created URLs.
 
 ---
 
@@ -211,7 +225,7 @@ Follows the testing pyramid with three layers:
 
 **Unit tests** — isolated testing of services, controllers, repositories, JWT logic, Base62 encoder, Snowflake ID generator, and rate limiter logic using JUnit 5 and Mockito.
 
-**Integration tests** — verifies interaction between Spring Boot, MySQL, Redis, and Kafka using Testcontainers, MockMvc, and Awaitility. Validates async event-driven workflows end-to-end.
+**Integration tests** — verifies interaction between Spring Boot, MySQL, Redis Stack, and Kafka using Testcontainers, MockMvc, and Awaitility. Validates async event-driven workflows end-to-end.
 
 **End-to-end tests** — full black-box API testing via RestAssured against real infrastructure. Covers authentication, URL shortening, redirects, analytics, and authorization flows.
 
@@ -227,7 +241,8 @@ Prometheus and Grafana provide full-stack visibility:
 - Redis cache hit ratio
 - Redis performance metrics
 
-Grafana available at `http://localhost:3000` (default: admin/admin).
+Grafana is available at `http://localhost:3000` (default credentials: admin / admin).  
+The Prometheus datasource is provisioned automatically on first boot — no manual setup required.
 
 ---
 
@@ -239,7 +254,7 @@ Grafana available at `http://localhost:3000` (default: admin/admin).
 
 **Redis Lua scripts for rate limiting** — Lua scripts execute atomically on Redis, ensuring the leaky bucket counter check-and-decrement is a single operation with no race conditions across instances.
 
-**Bloom Filter before Redis** — a non-existent short code lookup (e.g. a bot scanning random codes) would cause a Redis miss and a MySQL query on every request. The Bloom Filter catches these at near-zero cost before they touch any data store.
+**Cuckoo Filter before Redis** — a non-existent short code lookup (e.g. a bot scanning random codes) would cause a Redis miss and a MySQL query on every request. The Cuckoo Filter catches these at near-zero cost before they touch any data store. Crucially, unlike a Bloom Filter, it supports deletion: when URLs are deleted or expire, their fingerprints are removed, keeping the false-positive rate bounded regardless of churn.
 
 ---
 
@@ -312,10 +327,10 @@ KAFKA_SERVERS=kafka:9092
 ### 3. Start the stack
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
-Starts MySQL, Redis, Kafka, Prometheus, Grafana, and the Spring Boot backend automatically.
+Builds the application image locally and starts MySQL, Redis Stack, Kafka, Prometheus, Grafana, and the Spring Boot backend. Grafana connects to Prometheus automatically — no manual datasource configuration needed.
 
 ### 4. Run the frontend
 
@@ -330,7 +345,7 @@ Frontend available at `http://localhost:5173`, backend at `http://localhost:8080
 ### Docker Hub
 
 ```bash
-docker pull trimoyeeg/url-shortener:v3
+docker pull trimoyeeg/url-shortener:v4
 ```
 
 ### Stopping
