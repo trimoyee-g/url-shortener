@@ -1,6 +1,6 @@
 package com.urlshortener.url_shortener.integration;
 
-import com.redis.testcontainers.RedisContainer;
+import com.redis.testcontainers.RedisStackContainer;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -24,8 +24,8 @@ public abstract class BaseIntegrationTest {
                     .withPassword("root");
 
     @Container
-    static final RedisContainer redis =
-            new RedisContainer(DockerImageName.parse("redis:7.2-alpine"));
+    static final RedisStackContainer redis =
+            new RedisStackContainer(DockerImageName.parse("redis/redis-stack:latest"));
 
     @Container
     static final KafkaContainer kafka =
@@ -50,7 +50,7 @@ public abstract class BaseIntegrationTest {
         registry.add("spring.kafka.consumer.properties.spring.json.value.default.type",
                 () -> "com.urlshortener.url_shortener.dto.UrlClickEvent");
 
-        // Disable Bloom Filter population on startup
-        registry.add("app.bloom-filter.enabled", () -> "false");
+        // Disable Cuckoo Filter population on startup
+        registry.add("app.cuckoo-filter.enabled", () -> "false");
     }
 }

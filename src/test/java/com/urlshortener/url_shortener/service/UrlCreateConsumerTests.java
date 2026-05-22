@@ -5,7 +5,7 @@ import com.urlshortener.url_shortener.entity.Url;
 import com.urlshortener.url_shortener.entity.User;
 import com.urlshortener.url_shortener.repository.UrlRepository;
 import com.urlshortener.url_shortener.repository.UserRepository;
-import com.urlshortener.url_shortener.util.UrlBloomFilter;
+import com.urlshortener.url_shortener.util.UrlCuckooFilter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -37,7 +37,7 @@ class UrlCreateConsumerTests {
     private UserRepository userRepository;
 
     @Mock
-    private UrlBloomFilter bloomFilter;
+    private UrlCuckooFilter cuckooFilter;
 
     @Mock
     private RedisTemplate<String, String> redisTemplate;
@@ -94,7 +94,7 @@ class UrlCreateConsumerTests {
     class HandleCreateEvent {
 
         @Test
-        @DisplayName("saves URL, updates bloom filter, and caches URL")
+        @DisplayName("saves URL, updates cuckoo filter, and caches URL")
         void processesEventSuccessfully() {
 
             // Arrange
@@ -123,7 +123,7 @@ class UrlCreateConsumerTests {
             assertThat(saved.isActive()).isTrue();
 
             // Assert bloom filter
-            verify(bloomFilter).add("abc123");
+            verify(cuckooFilter).add("abc123");
 
             // Assert Redis cache
             verify(valueOperations).set(
@@ -156,7 +156,7 @@ class UrlCreateConsumerTests {
 
             assertThat(saved.getUser()).isNull();
 
-            verify(bloomFilter).add("abc123");
+            verify(cuckooFilter).add("abc123");
 
             verify(valueOperations).set(
                     eq("url:abc123"),
@@ -238,7 +238,7 @@ class UrlCreateConsumerTests {
 
             // Since DB failed first,
             // these should never execute
-            verify(bloomFilter, never()).add(anyString());
+            verify(cuckooFilter, never()).add(anyString());
 
             verify(valueOperations, never()).set(
                     anyString(),
@@ -267,7 +267,7 @@ class UrlCreateConsumerTests {
             // Assert
             verify(urlRepository).save(any(Url.class));
 
-            verify(bloomFilter).add("abc123");
+            verify(cuckooFilter).add("abc123");
 
             verify(valueOperations).set(
                     eq("url:abc123"),
@@ -277,7 +277,7 @@ class UrlCreateConsumerTests {
         }
 
         @Test
-        @DisplayName("handles bloom filter failure gracefully")
+        @DisplayName("handles cuckoo filter failure gracefully")
         void handlesBloomFilterFailure_gracefully() {
 
             // Arrange
@@ -287,7 +287,7 @@ class UrlCreateConsumerTests {
                     .thenReturn(Optional.of(buildUser()));
 
             doThrow(new RuntimeException("Bloom filter failure"))
-                    .when(bloomFilter)
+                    .when(cuckooFilter)
                     .add(anyString());
 
             // Act
@@ -296,7 +296,7 @@ class UrlCreateConsumerTests {
             // Assert
             verify(urlRepository).save(any(Url.class));
 
-            verify(bloomFilter).add("abc123");
+            verify(cuckooFilter).add("abc123");
 
             // Redis should not execute because bloom failed first
             verify(valueOperations, never()).set(

@@ -11,7 +11,7 @@ import com.urlshortener.url_shortener.repository.UrlRepository;
 import com.urlshortener.url_shortener.repository.UserRepository;
 import com.urlshortener.url_shortener.util.Base62Encoder;
 import com.urlshortener.url_shortener.util.SnowflakeIdGenerator;
-import com.urlshortener.url_shortener.util.UrlBloomFilter;
+import com.urlshortener.url_shortener.util.UrlCuckooFilter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,7 +58,7 @@ class UrlServiceImplTests {
     private SnowflakeIdGenerator idGenerator;
 
     @Mock
-    private UrlBloomFilter bloomFilter;
+    private UrlCuckooFilter cuckooFilter;
 
     @Mock
     private UrlCreateProducer urlCreateProducer;
@@ -81,7 +81,7 @@ class UrlServiceImplTests {
                 redisTemplate,
                 base62Encoder,
                 idGenerator,
-                bloomFilter,
+                cuckooFilter,
                 urlCreateProducer,
                 meterRegistry,
                 rateLimiterService
@@ -240,7 +240,7 @@ class UrlServiceImplTests {
 
             String shortCode = "abc123";
 
-            when(bloomFilter.mightContain(shortCode))
+            when(cuckooFilter.mightContain(shortCode))
                     .thenReturn(true);
 
             when(valueOperations.get("url:" + shortCode))
@@ -271,7 +271,7 @@ class UrlServiceImplTests {
             when(valueOperations.get("url:" + shortCode))
                     .thenReturn(null);
 
-            when(bloomFilter.mightContain(shortCode))
+            when(cuckooFilter.mightContain(shortCode))
                     .thenReturn(true);
 
             when(urlRepository.findByShortCodeAndActiveTrue(shortCode))
@@ -294,12 +294,12 @@ class UrlServiceImplTests {
         }
 
         @Test
-        @DisplayName("throws when bloom filter rejects code — Redis is never consulted")
-        void throwsWhenBloomFilterRejects() {
+        @DisplayName("throws when cuckoo filter rejects code — Redis is never consulted")
+        void throwsWhenCuckooFilterRejects() {
 
             String shortCode = "missing";
 
-            when(bloomFilter.mightContain(shortCode))
+            when(cuckooFilter.mightContain(shortCode))
                     .thenReturn(false);
 
             assertThatThrownBy(() ->
@@ -325,7 +325,7 @@ class UrlServiceImplTests {
             when(valueOperations.get("url:" + shortCode))
                     .thenReturn(null);
 
-            when(bloomFilter.mightContain(shortCode))
+            when(cuckooFilter.mightContain(shortCode))
                     .thenReturn(true);
 
             when(urlRepository.findByShortCodeAndActiveTrue(shortCode))
@@ -361,6 +361,8 @@ class UrlServiceImplTests {
 
             verify(redisTemplate)
                     .delete("url:abc123");
+
+            verify(cuckooFilter).delete("abc123");
         }
 
         @Test
