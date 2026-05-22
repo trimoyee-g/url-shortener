@@ -170,6 +170,7 @@ public class UrlServiceImpl implements UrlService {
                 });
 
         if (url.getExpiresAt() != null && url.getExpiresAt().isBefore(Instant.now())) {
+            cuckooFilter.delete(shortCode);
             redirectFailedCounter.increment();
             throw new UrlNotFoundException(shortCode);
         }

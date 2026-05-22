@@ -334,6 +334,8 @@ class UrlServiceImplTests {
             assertThatThrownBy(() ->
                     urlService.resolve(shortCode)
             ).isInstanceOf(UrlNotFoundException.class);
+
+            verify(cuckooFilter).delete(shortCode);
         }
     }
 
