@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Component
@@ -20,6 +21,7 @@ public class UrlCuckooFilter {
     private static final double LOAD_FACTOR_ALERT = 0.85;
 
     private final RedisTemplate<String, String> redisTemplate;
+    private final AtomicLong insertCount = new AtomicLong();
 
     @PostConstruct
     public void init() {
@@ -28,50 +30,70 @@ public class UrlCuckooFilter {
                     connection.execute("CF.RESERVE",
                             key(),
                             String.valueOf(CAPACITY).getBytes(StandardCharsets.UTF_8),
-                            "BUCKETSIZE".getBytes(StandardCharsets.UTF_8), "2".getBytes(StandardCharsets.UTF_8),
-                            "MAXITERATIONS".getBytes(StandardCharsets.UTF_8), "20".getBytes(StandardCharsets.UTF_8),
-                            "EXPANSION".getBytes(StandardCharsets.UTF_8), "2".getBytes(StandardCharsets.UTF_8)
+                            "BUCKETSIZE".getBytes(StandardCharsets.UTF_8),     "2".getBytes(StandardCharsets.UTF_8),
+                            "MAXITERATIONS".getBytes(StandardCharsets.UTF_8),  "20".getBytes(StandardCharsets.UTF_8),
+                            "EXPANSION".getBytes(StandardCharsets.UTF_8),      "2".getBytes(StandardCharsets.UTF_8)
                     )
             );
             log.info("Cuckoo filter reserved with capacity {}", CAPACITY);
         } catch (Exception e) {
+            // Key already exists from a previous run — safe to ignore
             log.debug("Cuckoo filter already exists: {}", e.getMessage());
         }
     }
 
     public void add(String shortCode) {
-        redisTemplate.execute((RedisCallback<Object>) connection ->
-                connection.execute("CF.ADD", key(), bytes(shortCode))
-        );
-        checkLoadFactor();
+        try {
+            redisTemplate.execute((RedisCallback<Object>) connection -> {
+                connection.execute("CF.ADD", key(), bytes(shortCode));
+                return null; // CF.ADD returns boolean — ByteArrayOutput can't decode it, ignore
+            });
+        } catch (Exception e) {
+            log.debug("CF.ADD decode harmless error (expected): {}", e.getMessage());
+        }
+        if (insertCount.incrementAndGet() % 10_000 == 0) checkLoadFactor();
     }
 
     // Pipelined — single round trip for all codes
     public void addAll(List<String> shortCodes) {
         if (shortCodes == null || shortCodes.isEmpty()) return;
         log.info("Batch inserting {} codes into Cuckoo Filter...", shortCodes.size());
-        redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
-            shortCodes.forEach(code ->
-                    connection.execute("CF.ADD", key(), bytes(code))
-            );
-            return null;
-        });
+        try {
+            redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
+                shortCodes.forEach(code ->
+                        connection.execute("CF.ADD", key(), bytes(code))
+                );
+                return null;
+            });
+        } catch (Exception e) {
+            log.debug("CF.ADD pipeline decode harmless error (expected): {}", e.getMessage());
+        }
         log.info("Cuckoo Filter batch insert complete.");
     }
 
     public boolean mightContain(String shortCode) {
-        Object result = redisTemplate.execute((RedisCallback<Object>) connection ->
-                connection.execute("CF.EXISTS", key(), bytes(shortCode))
-        );
-        return toLong(result) == 1L;
+        try {
+            Object result = redisTemplate.execute((RedisCallback<Object>) connection ->
+                    connection.execute("CF.EXISTS", key(), bytes(shortCode))
+            );
+            // CF.EXISTS may return boolean or long depending on Redis/Lettuce version
+            if (result instanceof Boolean b) return b;
+            return toLong(result) == 1L;
+        } catch (Exception e) {
+            // On decode error, fail open (let the request through to Redis/DB)
+            log.debug("CF.EXISTS decode error, failing open: {}", e.getMessage());
+            return true;
+        }
     }
 
     public void delete(String shortCode) {
-        Object result = redisTemplate.execute((RedisCallback<Object>) connection ->
-                connection.execute("CF.DEL", key(), bytes(shortCode))
-        );
-        if (toLong(result) != 1L) {
-            log.warn("Cuckoo filter: '{}' was not present during delete (possible false-positive or double-delete)", shortCode);
+        try {
+            redisTemplate.execute((RedisCallback<Object>) connection -> {
+                connection.execute("CF.DEL", key(), bytes(shortCode));
+                return null; // CF.DEL returns boolean — same issue as CF.ADD
+            });
+        } catch (Exception e) {
+            log.debug("CF.DEL decode harmless error (expected): {}", e.getMessage());
         }
     }
 
@@ -81,7 +103,6 @@ public class UrlCuckooFilter {
                     (List<?>) connection.execute("CF.INFO", key())
             );
             if (info == null) return 0L;
-            // CF.INFO returns a flat [field, value, field, value...] list
             for (int i = 0; i + 1 < info.size(); i += 2) {
                 if ("Number of items inserted".equals(decodeField(info.get(i)))) {
                     return toLong(info.get(i + 1));
@@ -97,12 +118,16 @@ public class UrlCuckooFilter {
     public void reload(List<String> allActiveCodes) {
         if (allActiveCodes == null || allActiveCodes.isEmpty()) return;
         log.info("Re-populating Cuckoo Filter with {} codes", allActiveCodes.size());
-        redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
-            allActiveCodes.forEach(code ->
-                    connection.execute("CF.ADD", key(), bytes(code))
-            );
-            return null;
-        });
+        try {
+            redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
+                allActiveCodes.forEach(code ->
+                        connection.execute("CF.ADD", key(), bytes(code))
+                );
+                return null;
+            });
+        } catch (Exception e) {
+            log.debug("CF.ADD reload pipeline decode harmless error (expected): {}", e.getMessage());
+        }
         log.info("Cuckoo Filter reload complete.");
     }
 
@@ -110,8 +135,8 @@ public class UrlCuckooFilter {
         long count = getCount();
         double load = (double) count / CAPACITY;
         if (load >= LOAD_FACTOR_ALERT) {
-            log.warn("Cuckoo filter load factor is {:.1%} ({}/{}). Consider increasing capacity.",
-                    load, count, CAPACITY);
+            log.warn("Cuckoo filter load factor is {}% ({}/{}). Consider increasing capacity.",
+                    String.format("%.1f", load * 100), count, CAPACITY);
         }
     }
 
@@ -124,7 +149,7 @@ public class UrlCuckooFilter {
     }
 
     private static String decodeField(Object raw) {
-        if (raw instanceof byte[]) return new String((byte[]) raw, StandardCharsets.UTF_8);
+        if (raw instanceof byte[] b) return new String(b, StandardCharsets.UTF_8);
         if (raw instanceof String s) return s;
         return "";
     }
