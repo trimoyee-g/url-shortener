@@ -174,6 +174,7 @@ export function shortenScenario(data) {
           'Authorization': `Bearer ${token}`,
           'X-Forwarded-For': fakeIp(),
         },
+        expectedStatuses: http.expectedStatuses(201, 429),
         tags: { name: 'POST /api/v1/urls/shorten', scenario: 'shorten' },
       }
     );

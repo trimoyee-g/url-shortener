@@ -12,10 +12,10 @@
  *   k6 run \
  *     --vus-max 2200 \
  *     -e BASE_URL=http://localhost:8080 \
- *     -e NUM_TEST_USERS=2000 \
+ *     -e NUM_TEST_USERS=200 \
  *     --out experimental-prometheus-rw \
  *     --summary-export=summary.json \
- *     k6/load-test.js
+ *     k6/stress-test.js
  */
 
 import http from 'k6/http';
