@@ -16,16 +16,20 @@ public class AnalyticsConsumer {
 
     private final ClickEventRepository clickEventRepository;
     private final RedisTemplate<String, String> redisTemplate;
+    private final GeoIpService geoIpService;
 
     @KafkaListener(topics = "url-clicks", groupId = "analytics-group")
     public void handleClickEvent(UrlClickEvent dto) {
         try {
+            String ip = dto.getIpAddress();
+            String country = geoIpService.getCountryCode(ip != null ? ip : "");
+
             ClickEvent event = ClickEvent.builder()
                     .shortCode(dto.getShortCode())
-                    .ipAddress(dto.getIpAddress())
+                    .ipAddress(ip)
                     .userAgent(dto.getUserAgent())
                     .referrer(dto.getReferer())
-                    .country(dto.getCountry() != null ? dto.getCountry() : "XX")
+                    .country(country)
                     .build();
 
             clickEventRepository.save(event);

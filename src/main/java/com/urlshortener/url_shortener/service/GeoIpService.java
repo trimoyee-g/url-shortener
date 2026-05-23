@@ -32,7 +32,11 @@ public class GeoIpService {
                 return "XX";
             }
 
-            return reader.country(address).getCountry().getIsoCode();
+            String iso = reader.country(address)
+                    .getCountry()
+                    .getIsoCode();
+
+            return iso != null ? iso : "XX";
 
         } catch (IOException | GeoIp2Exception e) {
             log.debug("GeoIP lookup failed for {}: {}", ip, e.getMessage());
