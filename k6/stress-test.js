@@ -1,16 +1,15 @@
 /**
- * k6 Load Test — URL Shortener (1000 Concurrent Users)
+ * k6 Load Test — URL Shortener (1500 concurrent virtual users)
  *
  * Scenarios:
  *   shorten  — POST /api/v1/urls/shorten
  *   redirect — GET  /{shortCode}
  *
  * Target:
- *   Sustain ~1000 concurrent users at peak load.
+ *   Sustain ~1500 concurrent virtual users at peak load.
  *
  * Run:
  *   k6 run \
- *     --vus-max 2200 \
  *     -e BASE_URL=http://localhost:8080 \
  *     -e NUM_TEST_USERS=200 \
  *     --out experimental-prometheus-rw \
