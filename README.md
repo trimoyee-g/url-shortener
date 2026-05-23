@@ -40,7 +40,7 @@ A URL shortener built to handle real production load — not just a CRUD app. Ke
 - **Asynchronous write path** — Kafka decouples URL creation from database persistence, eliminating write-path latency
 - **Distributed rate limiting** — leaky bucket via Redis Lua scripts, enforced atomically across all instances
 - **Full observability** — Prometheus and Grafana tracking P95/P99 latencies, cache hit ratios, and Kafka consumer lag
-- **Load tested** — verified at 500 concurrent users, 462 req/s, sub-20ms P95 redirect latency
+- **Load tested** — verified at 1500 concurrent users, 1232 req/s at peak, sub-139ms P95 redirect latency
 
 ---
 
