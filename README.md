@@ -327,7 +327,7 @@ KAFKA_SERVERS=kafka:9092
 ### 3. Start the stack
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
 Builds the application image locally and starts MySQL, Redis Stack, Kafka, Prometheus, Grafana, and the Spring Boot backend. Grafana connects to Prometheus automatically — no manual datasource configuration needed.
