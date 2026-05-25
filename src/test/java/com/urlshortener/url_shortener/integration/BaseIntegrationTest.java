@@ -5,8 +5,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
@@ -28,8 +28,8 @@ public abstract class BaseIntegrationTest {
             new RedisStackContainer(DockerImageName.parse("redis/redis-stack:latest"));
 
     @Container
-    static final KafkaContainer kafka =
-            new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.0"));
+    static final RabbitMQContainer rabbitmq =
+            new RabbitMQContainer(DockerImageName.parse("rabbitmq:3-management"));
 
     @DynamicPropertySource
     static void overrideProperties(DynamicPropertyRegistry registry) {
@@ -43,12 +43,11 @@ public abstract class BaseIntegrationTest {
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", redis::getFirstMappedPort);
 
-        // Kafka
-        registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
-
-        // Tell the JsonDeserializer exactly which class to deserialize into
-        registry.add("spring.kafka.consumer.properties.spring.json.value.default.type",
-                () -> "com.urlshortener.url_shortener.dto.UrlClickEvent");
+        // RabbitMQ
+        registry.add("spring.rabbitmq.host", rabbitmq::getHost);
+        registry.add("spring.rabbitmq.port", () -> rabbitmq.getMappedPort(5672));
+        registry.add("spring.rabbitmq.username", rabbitmq::getAdminUsername);
+        registry.add("spring.rabbitmq.password", rabbitmq::getAdminPassword);
 
         // Disable Cuckoo Filter population on startup
         registry.add("app.cuckoo-filter.enabled", () -> "false");

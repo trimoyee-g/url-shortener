@@ -61,9 +61,6 @@ class UrlServiceImplTests {
     private UrlCuckooFilter cuckooFilter;
 
     @Mock
-    private UrlCreateProducer urlCreateProducer;
-
-    @Mock
     private RateLimiterService rateLimiterService;
 
     private MeterRegistry meterRegistry;
@@ -82,7 +79,6 @@ class UrlServiceImplTests {
                 base62Encoder,
                 idGenerator,
                 cuckooFilter,
-                urlCreateProducer,
                 meterRegistry,
                 rateLimiterService
         );
@@ -141,9 +137,6 @@ class UrlServiceImplTests {
 
             assertThat(response.getShortCode())
                     .isEqualTo("abc123");
-
-            verify(urlCreateProducer, never())
-                    .publishCreate(any());
         }
 
         @Test
@@ -178,8 +171,7 @@ class UrlServiceImplTests {
             assertThat(response.getShortCode())
                     .isEqualTo("abc123");
 
-            verify(urlCreateProducer)
-                    .publishCreate(any());
+            verify(urlRepository).save(any());
         }
 
         @Test

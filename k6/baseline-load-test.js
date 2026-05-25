@@ -12,7 +12,7 @@
  *     -e BASE_URL=http://localhost:8080 \
  *     -e NUM_TEST_USERS=50 \
  *     --out experimental-prometheus-rw \
- *     k6/load-test.js
+ *     k6/baseline-load-test.js
  *
  * Env vars consumed by the output extension:
  *   K6_PROMETHEUS_RW_SERVER_URL   (default: http://localhost:9090/api/v1/write)

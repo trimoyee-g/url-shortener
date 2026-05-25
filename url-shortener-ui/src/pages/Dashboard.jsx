@@ -72,7 +72,7 @@ export default function Dashboard({ token, email, onLogout }) {
   const initials = email?.slice(0, 2).toUpperCase() ?? "??";
 
   return (
-    <Box sx={{ minHeight: "100vh", background: "#080C10" }}>
+    <Box sx={{ minHeight: "100vh", background: "#080C10", animation: "pageIn 0.45s ease both" }}>
       {/* Topbar */}
       <Box
         sx={{
@@ -90,11 +90,11 @@ export default function Dashboard({ token, email, onLogout }) {
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-          <Zap size={18} color="#00FF94" />
+          <Zap size={18} color="#38BDF8" />
           <Typography
             variant="h6"
             sx={{
-              color: "#00FF94",
+              color: "#38BDF8",
               letterSpacing: "0.1em",
               fontSize: "0.85rem",
             }}
@@ -121,11 +121,11 @@ export default function Dashboard({ token, email, onLogout }) {
             sx={{
               width: 32,
               height: 32,
-              background: "#00FF9422",
-              color: "#00FF94",
+              background: "#38BDF822",
+              color: "#38BDF8",
               fontSize: "0.7rem",
               cursor: "pointer",
-              border: "1px solid #00FF9444",
+              border: "1px solid #38BDF844",
             }}
             onClick={(e) => setAnchorEl(e.currentTarget)}
           >
@@ -252,14 +252,14 @@ export default function Dashboard({ token, email, onLogout }) {
                             label={url.shortCode}
                             size="small"
                             sx={{
-                              background: "rgba(0,255,148,0.08)",
-                              color: "#00FF94",
-                              border: "1px solid rgba(0,255,148,0.2)",
+                              background: "rgba(56,189,248,0.08)",
+                              color: "#38BDF8",
+                              border: "1px solid rgba(56,189,248,0.2)",
                               cursor: "pointer",
                             }}
                           />
                           {copied === url.shortCode ? (
-                            <Check size={12} color="#00FF94" />
+                            <Check size={12} color="#38BDF8" />
                           ) : (
                             <Copy size={12} color="#7D8590" />
                           )}
@@ -316,7 +316,7 @@ export default function Dashboard({ token, email, onLogout }) {
                               onClick={() => setStatsUrl(url)}
                               sx={{
                                 color: "#7D8590",
-                                "&:hover": { color: "#00FF94" },
+                                "&:hover": { color: "#38BDF8" },
                               }}
                             >
                               <BarChart2 size={15} />

@@ -35,7 +35,6 @@ public class AnalyticsService {
         urlRepository.findByShortCodeAndActiveTrue(shortCode)
                 .orElseThrow(() -> new UrlNotFoundException(shortCode));
 
-        // Use the Redis counter we update in the Kafka Consumer
         long total = getClickCount(shortCode);
         long unique = clickEventRepository.countUniqueIpsByShortCode(shortCode);
 
@@ -70,10 +69,6 @@ public class AnalyticsService {
     private long getClickCount(String shortCode) {
         String cached = redisTemplate.opsForValue().get("clicks:" + shortCode);
         if (cached != null) return Long.parseLong(cached);
-
-        // Fallback to DB if Redis counter is empty
-        long count = clickEventRepository.countByShortCode(shortCode);
-        redisTemplate.opsForValue().set("clicks:" + shortCode, String.valueOf(count));
-        return count;
+        return clickEventRepository.countByShortCode(shortCode);
     }
 }

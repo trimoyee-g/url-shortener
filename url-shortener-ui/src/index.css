@@ -1,17 +1,94 @@
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap");
+
 * {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
-::-webkit-scrollbar {
-  width: 6px;
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #080c10; }
+::-webkit-scrollbar-thumb { background: #21262d; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #30363d; }
+
+/* ─── Keyframes ──────────────────────────────────────── */
+
+/* Float card Y axis */
+@keyframes floatY {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-22px); }
 }
-::-webkit-scrollbar-track {
-  background: #080c10;
+
+/* Slow pulsing for glow orbs */
+@keyframes pulseSlow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(1.08); }
 }
-::-webkit-scrollbar-thumb {
-  background: #21262d;
-  border-radius: 3px;
+
+/* Pulsing green dot in badge */
+@keyframes pulseDot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.8); opacity: 0.4; }
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #30363d;
+
+/* Animated gradient on text */
+@keyframes gradientShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Page-load entrance from top */
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Page-load entrance from bottom */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Generic page entrance */
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Particle twinkle */
+@keyframes twinkle {
+  0%, 100% { opacity: 0.07; transform: scale(1); }
+  50%       { opacity: 0.4;  transform: scale(1.6); }
+}
+
+/* Scroll indicator bounce wrapper */
+@keyframes bounceScroll {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(7px); }
+}
+
+/* Scroll dot slide */
+@keyframes scrollDotMove {
+  0%     { transform: translateY(0);   opacity: 1; }
+  80%    { transform: translateY(12px); opacity: 0; }
+  100%   { transform: translateY(0);   opacity: 0; }
+}
+
+/* Step number pulse */
+@keyframes stepPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(56,189,248,0.3); }
+  50%       { box-shadow: 0 0 0 8px rgba(56,189,248,0); }
+}
+
+/* Glow button pulse */
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 30px rgba(56,189,248,0.3); }
+  50%       { box-shadow: 0 0 55px rgba(56,189,248,0.5); }
+}
+
+/* Auth card shimmer border */
+@keyframes shimmerBorder {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
 }

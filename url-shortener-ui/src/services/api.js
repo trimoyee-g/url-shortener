@@ -35,7 +35,13 @@ export const api = {
         ttlSeconds: ttlSeconds || null,
       }),
     });
-    if (!r.ok) throw new Error((await r.json()).message || "Failed to shorten");
+    if (!r.ok) {
+      const body = await r.json();
+      const msg = body.message && typeof body.message === "object"
+        ? Object.values(body.message).join("; ")
+        : body.message || "Failed to shorten";
+      throw new Error(msg);
+    }
     return r.json();
   },
 

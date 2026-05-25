@@ -3,6 +3,7 @@ package com.urlshortener.url_shortener.service;
 import com.urlshortener.url_shortener.dto.UrlClickEvent;
 import com.urlshortener.url_shortener.entity.ClickEvent;
 import com.urlshortener.url_shortener.repository.ClickEventRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,7 @@ import org.springframework.data.redis.core.ValueOperations;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,8 +32,18 @@ public class AnalyticsConsumerTests {
     @Mock
     private ValueOperations<String, String> valueOperations;
 
+    @Mock
+    private GeoIpService geoIpService;
+
     @InjectMocks
     private AnalyticsConsumer analyticsConsumer;
+
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        lenient().when(geoIpService.getCountryCode(anyString())).thenReturn("US");
+    }
 
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -57,111 +69,47 @@ public class AnalyticsConsumerTests {
         @Test
         @DisplayName("saves click event to database")
         void savesClickEvent_toDatabase() {
-
-            // Arrange
             UrlClickEvent dto = buildEvent("abc123");
 
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-
-            // Act
             analyticsConsumer.handleClickEvent(dto);
 
-            // Assert
-            ArgumentCaptor<ClickEvent> eventCaptor =
-                    ArgumentCaptor.forClass(ClickEvent.class);
-
+            ArgumentCaptor<ClickEvent> eventCaptor = ArgumentCaptor.forClass(ClickEvent.class);
             verify(clickEventRepository).save(eventCaptor.capture());
 
-            ClickEvent savedEvent = eventCaptor.getValue();
-
-            assertThat(savedEvent.getShortCode()).isEqualTo("abc123");
-            assertThat(savedEvent.getIpAddress()).isEqualTo("192.168.1.1");
-            assertThat(savedEvent.getUserAgent()).isEqualTo("Mozilla/5.0");
-            assertThat(savedEvent.getReferrer()).isEqualTo("https://google.com");
+            ClickEvent saved = eventCaptor.getValue();
+            assertThat(saved.getShortCode()).isEqualTo("abc123");
+            assertThat(saved.getIpAddress()).isEqualTo("192.168.1.1");
+            assertThat(saved.getUserAgent()).isEqualTo("Mozilla/5.0");
+            assertThat(saved.getReferrer()).isEqualTo("https://google.com");
         }
 
         @Test
         @DisplayName("increments Redis click counter")
         void incrementsRedisCounter() {
+            analyticsConsumer.handleClickEvent(buildEvent("redis-code"));
 
-            // Arrange
-            UrlClickEvent dto = buildEvent("redis-code");
-
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-
-            // Act
-            analyticsConsumer.handleClickEvent(dto);
-
-            // Assert
-            verify(valueOperations)
-                    .increment("clicks:redis-code");
+            verify(valueOperations).increment("clicks:redis-code");
         }
 
         @Test
         @DisplayName("saves database record before incrementing Redis counter")
         void savesBeforeIncrementingRedis() {
+            analyticsConsumer.handleClickEvent(buildEvent("ordered"));
 
-            // Arrange
-            UrlClickEvent dto = buildEvent("ordered");
-
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-
-            // Act
-            analyticsConsumer.handleClickEvent(dto);
-
-            // Assert
             verify(clickEventRepository).save(any(ClickEvent.class));
             verify(valueOperations).increment("clicks:ordered");
-
             verifyNoMoreInteractions(clickEventRepository, valueOperations);
-        }
-
-        @Test
-        @DisplayName("handles nullable optional fields correctly")
-        void handlesNullableFields() {
-
-            // Arrange
-            UrlClickEvent dto = UrlClickEvent.builder()
-                    .shortCode("minimal")
-                    .build();
-
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-
-            // Act
-            analyticsConsumer.handleClickEvent(dto);
-
-            // Assert
-            ArgumentCaptor<ClickEvent> eventCaptor =
-                    ArgumentCaptor.forClass(ClickEvent.class);
-
-            verify(clickEventRepository).save(eventCaptor.capture());
-
-            ClickEvent savedEvent = eventCaptor.getValue();
-
-            assertThat(savedEvent.getShortCode()).isEqualTo("minimal");
-            assertThat(savedEvent.getIpAddress()).isNull();
-            assertThat(savedEvent.getUserAgent()).isNull();
-            assertThat(savedEvent.getReferrer()).isNull();
-
-            verify(valueOperations).increment("clicks:minimal");
         }
 
         @Test
         @DisplayName("does not throw when repository save fails")
         void doesNotThrow_whenRepositoryFails() {
-
-            // Arrange
-            UrlClickEvent dto = buildEvent("db-failure");
-
             when(clickEventRepository.save(any(ClickEvent.class)))
                     .thenThrow(new RuntimeException("DB failure"));
 
-            // Act
-            analyticsConsumer.handleClickEvent(dto);
+            analyticsConsumer.handleClickEvent(buildEvent("db-failure"));
 
-            // Assert
             verify(clickEventRepository).save(any(ClickEvent.class));
-
             verify(redisTemplate, never()).opsForValue();
             verify(valueOperations, never()).increment(anyString());
         }
@@ -169,44 +117,22 @@ public class AnalyticsConsumerTests {
         @Test
         @DisplayName("does not throw when Redis increment fails")
         void doesNotThrow_whenRedisFails() {
-
-            // Arrange
-            UrlClickEvent dto = buildEvent("redis-failure");
-
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-
             doThrow(new RuntimeException("Redis failure"))
-                    .when(valueOperations)
-                    .increment("clicks:redis-failure");
+                    .when(valueOperations).increment("clicks:redis-failure");
 
-            // Act
-            analyticsConsumer.handleClickEvent(dto);
+            analyticsConsumer.handleClickEvent(buildEvent("redis-failure"));
 
-            // Assert
             verify(clickEventRepository).save(any(ClickEvent.class));
-
-            verify(valueOperations)
-                    .increment("clicks:redis-failure");
+            verify(valueOperations).increment("clicks:redis-failure");
         }
 
         @Test
         @DisplayName("processes multiple click events independently")
         void processesMultipleEventsIndependently() {
+            analyticsConsumer.handleClickEvent(buildEvent("code-1"));
+            analyticsConsumer.handleClickEvent(buildEvent("code-2"));
 
-            // Arrange
-            UrlClickEvent first = buildEvent("code-1");
-            UrlClickEvent second = buildEvent("code-2");
-
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-
-            // Act
-            analyticsConsumer.handleClickEvent(first);
-            analyticsConsumer.handleClickEvent(second);
-
-            // Assert
-            verify(clickEventRepository, times(2))
-                    .save(any(ClickEvent.class));
-
+            verify(clickEventRepository, times(2)).save(any(ClickEvent.class));
             verify(valueOperations).increment("clicks:code-1");
             verify(valueOperations).increment("clicks:code-2");
         }

@@ -46,7 +46,6 @@ public class UrlServiceImpl implements UrlService {
     private final Base62Encoder base62Encoder;
     private final SnowflakeIdGenerator idGenerator;
     private final UrlCuckooFilter cuckooFilter;
-    private final UrlCreateProducer urlCreateProducer;
     private final MeterRegistry meterRegistry;
     private final RateLimiterService rateLimiterService;
 
@@ -119,22 +118,11 @@ public class UrlServiceImpl implements UrlService {
                 .createdAt(Instant.now())
                 .build();
 
-        // Publish create event and return immediately to reduce latency.
-        urlCreateProducer.publishCreate(com.urlshortener.url_shortener.dto.UrlCreateEvent.builder()
-                .id(id)
-                .shortCode(shortCode)
-                .longUrl(normalizedUrl)
-                .customAlias(customAlias)
-                .userId(user.getId())
-                .expiresAt(expiresAt)
-                .createdAt(url.getCreatedAt())
-                .build());
+        urlRepository.save(url);
+        cacheUrl(shortCode, normalizedUrl, expiresAt);
+        cuckooFilter.add(shortCode);
 
-        // Make immediately resolvable without waiting for Kafka consumer
-        cacheUrl(shortCode, normalizedUrl, expiresAt);  // Redis cache
-        cuckooFilter.add(shortCode);                    // Cuckoo Filter
-
-        log.info("Published short URL create event: {} -> {}", shortCode, url.getLongUrl());
+        log.info("Created short URL: {} -> {}", shortCode, url.getLongUrl());
         return toResponse(url);
     }
 

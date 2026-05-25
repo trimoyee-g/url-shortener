@@ -1,12 +1,13 @@
 package com.urlshortener.url_shortener.service;
 
+import com.urlshortener.url_shortener.config.RabbitMQConfig;
 import com.urlshortener.url_shortener.dto.UrlClickEvent;
 import com.urlshortener.url_shortener.entity.ClickEvent;
 import com.urlshortener.url_shortener.repository.ClickEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -18,11 +19,11 @@ public class AnalyticsConsumer {
     private final RedisTemplate<String, String> redisTemplate;
     private final GeoIpService geoIpService;
 
-    @KafkaListener(topics = "url-clicks", groupId = "analytics-group")
+    @RabbitListener(queues = RabbitMQConfig.CLICK_QUEUE)
     public void handleClickEvent(UrlClickEvent dto) {
         try {
-            String ip = dto.getIpAddress();
-            String country = geoIpService.getCountryCode(ip != null ? ip : "");
+            String ip = dto.getIpAddress() != null ? dto.getIpAddress() : "0.0.0.0";
+            String country = geoIpService.getCountryCode(ip);
 
             ClickEvent event = ClickEvent.builder()
                     .shortCode(dto.getShortCode())

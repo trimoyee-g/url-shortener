@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Dialog, DialogTitle, DialogContent, Box, Typography, IconButton,
-  Stack, Card, Skeleton, LinearProgress, Tooltip
+  Stack, Card, Skeleton, LinearProgress, Tooltip, Alert
 } from "@mui/material";
-import { 
-  BarChart2, X, MousePointer, Users, TrendingUp, Globe 
+import {
+  BarChart2, X, MousePointer, Users, TrendingUp, Globe, RefreshCw
 } from "lucide-react";
 import { api } from "../services/api";
 import { fmtNum } from "../utils/formatters";
@@ -12,18 +12,25 @@ import { fmtNum } from "../utils/formatters";
 export default function StatsDialog({ open, onClose, token, url }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (!open || !url) return;
+  const fetchStats = useCallback(() => {
+    if (!url) return;
     setLoading(true);
+    setError(null);
     api
       .getStats(token, url.shortCode)
-      .then(setStats)
-      .catch(console.error)
+      .then((data) => { setStats(data); })
+      .catch((e) => setError(e.message || "Failed to load analytics"))
       .finally(() => setLoading(false));
-  }, [open, url]);
+  }, [token, url]);
 
-  const StatCard = ({ icon, label, value, color = "#00FF94" }) => (
+  useEffect(() => {
+    if (!open) { setStats(null); setError(null); return; }
+    fetchStats();
+  }, [open, fetchStats]);
+
+  const StatCard = ({ icon, label, value, color = "#38BDF8" }) => (
     <Card sx={{ p: 2, flex: 1, minWidth: 0 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
         <Box sx={{ color }}>{icon}</Box>
@@ -61,22 +68,29 @@ export default function StatsDialog({ open, onClose, token, url }) {
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-          <BarChart2 size={18} color="#00FF94" />
+          <BarChart2 size={18} color="#38BDF8" />
           Analytics —{" "}
           <Typography
             component="span"
             sx={{
               fontFamily: "'IBM Plex Mono', monospace",
-              color: "#00FF94",
+              color: "#38BDF8",
               fontSize: "0.9rem",
             }}
           >
             {url?.shortCode}
           </Typography>
         </Box>
-        <IconButton onClick={onClose} size="small">
-          <X size={16} />
-        </IconButton>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+          <Tooltip title="Refresh">
+            <IconButton size="small" onClick={fetchStats} disabled={loading} sx={{ color: "#7D8590" }}>
+              <RefreshCw size={14} />
+            </IconButton>
+          </Tooltip>
+          <IconButton onClick={onClose} size="small">
+            <X size={16} />
+          </IconButton>
+        </Box>
       </DialogTitle>
       <DialogContent>
         {loading ? (
@@ -99,6 +113,13 @@ export default function StatsDialog({ open, onClose, token, url }) {
               />
             </Stack>
           </Box>
+        ) : error ? (
+          <Alert
+            severity="error"
+            sx={{ mt: 1, fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.75rem" }}
+          >
+            {error}
+          </Alert>
         ) : stats ? (
           <Stack spacing={3} sx={{ pt: 1 }}>
             {/* Stat cards */}
@@ -107,7 +128,7 @@ export default function StatsDialog({ open, onClose, token, url }) {
                 icon={<MousePointer size={16} />}
                 label="TOTAL CLICKS"
                 value={stats.totalClicks}
-                color="#00FF94"
+                color="#38BDF8"
               />
               <StatCard
                 icon={<Users size={16} />}
@@ -189,7 +210,7 @@ export default function StatsDialog({ open, onClose, token, url }) {
                             borderRadius: 2,
                             background: "#21262D",
                             "& .MuiLinearProgress-bar": {
-                              background: "#00FF94",
+                              background: "#38BDF8",
                               borderRadius: 2,
                             },
                           }}
@@ -227,12 +248,12 @@ export default function StatsDialog({ open, onClose, token, url }) {
                         <Box
                           sx={{
                             flex: 1,
-                            background: `rgba(0,255,148,${0.2 + (h / 100) * 0.8})`,
+                            background: `rgba(56,189,248,${0.2 + (h / 100) * 0.8})`,
                             height: `${Math.max(h, 4)}%`,
                             borderRadius: "2px 2px 0 0",
                             transition: "all 0.2s",
                             cursor: "default",
-                            "&:hover": { background: "#00FF94" },
+                            "&:hover": { background: "#38BDF8" },
                             minWidth: 4,
                           }}
                         />

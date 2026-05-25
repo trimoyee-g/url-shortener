@@ -49,7 +49,7 @@ export default function QrDialog({ open, onClose, token, shortCode }) {
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <QrCode size={18} color="#00FF94" /> QR Code
+          <QrCode size={18} color="#38BDF8" /> QR Code
         </Box>
         <IconButton onClick={onClose} size="small">
           <X size={16} />
@@ -58,7 +58,7 @@ export default function QrDialog({ open, onClose, token, shortCode }) {
       <DialogContent sx={{ textAlign: "center", pb: 3 }}>
         {loading ? (
           <Box sx={{ py: 4 }}>
-            <CircularProgress sx={{ color: "#00FF94" }} />
+            <CircularProgress sx={{ color: "#38BDF8" }} />
           </Box>
         ) : src ? (
           <Box>

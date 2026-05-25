@@ -83,3 +83,8 @@ docker-compose.override.yml
 # =====================
 application-local.yml
 application-dev.yml
+
+# =====================
+# Misc
+# =====================
+summary.json

@@ -4,8 +4,8 @@ import { createTheme } from "@mui/material/styles";
 export const theme = createTheme({
   palette: {
     mode: "dark",
-    primary: { main: "#00FF94" },
-    secondary: { main: "#FF6B6B" },
+    primary: { main: "#38BDF8" },
+    secondary: { main: "#F87171" },
     background: { default: "#080C10", paper: "#0D1117" },
     text: { primary: "#E6EDF3", secondary: "#7D8590" },
   },
@@ -29,11 +29,11 @@ export const theme = createTheme({
           letterSpacing: "0.02em",
         },
         containedPrimary: {
-          background: "#00FF94",
+          background: "#38BDF8",
           color: "#080C10",
           "&:hover": {
-            background: "#00CC77",
-            boxShadow: "0 0 20px rgba(0,255,148,0.4)",
+            background: "#34D399",
+            boxShadow: "0 0 20px rgba(56,189,248,0.4)",
           },
         },
       },
@@ -45,13 +45,13 @@ export const theme = createTheme({
             fontFamily: "'IBM Plex Mono', monospace",
             fontSize: "0.875rem",
             "& fieldset": { borderColor: "#21262D" },
-            "&:hover fieldset": { borderColor: "#00FF94" },
-            "&.Mui-focused fieldset": { borderColor: "#00FF94" },
+            "&:hover fieldset": { borderColor: "#1d769d" },
+            "&.Mui-focused fieldset": { borderColor: "#38BDF8" },
           },
           "& .MuiInputLabel-root": {
             fontFamily: "'IBM Plex Mono', monospace",
             fontSize: "0.875rem",
-            "&.Mui-focused": { color: "#00FF94" },
+            "&.Mui-focused": { color: "#38BDF8" },
           },
         },
       },

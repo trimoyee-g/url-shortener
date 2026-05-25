@@ -1,33 +1,26 @@
 package com.urlshortener.url_shortener.service;
 
+import com.urlshortener.url_shortener.config.RabbitMQConfig;
 import com.urlshortener.url_shortener.dto.UrlClickEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 public class AnalyticsProducerTests {
 
     @Mock
-    private KafkaTemplate<String, UrlClickEvent> kafkaTemplate;
+    private RabbitTemplate rabbitTemplate;
 
     @InjectMocks
     private AnalyticsProducer analyticsProducer;
-
-
-    // ── Constants ────────────────────────────────────────────────────────────
-
-    private static final String TOPIC = "url-clicks";
 
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -51,126 +44,64 @@ public class AnalyticsProducerTests {
     class RecordClick {
 
         @Test
-        @DisplayName("publishes click event to Kafka topic")
-        void publishesClickEvent_toKafka() {
-
-            // Arrange
+        @DisplayName("publishes click event to RabbitMQ exchange")
+        void publishesClickEvent_toRabbitMQ() {
             UrlClickEvent event = buildEvent("abc123");
 
-            // Act
             analyticsProducer.recordClick(event);
 
-            // Assert
-            verify(kafkaTemplate).send(
-                    TOPIC,
-                    "abc123",
+            verify(rabbitTemplate).convertAndSend(
+                    RabbitMQConfig.CLICK_EXCHANGE,
+                    RabbitMQConfig.CLICK_ROUTING_KEY,
                     event
             );
         }
 
         @Test
-        @DisplayName("uses shortCode as Kafka message key")
-        void usesShortCode_asKafkaKey() {
-
-            // Arrange
-            UrlClickEvent event = buildEvent("partition-key");
-
-            // Act
-            analyticsProducer.recordClick(event);
-
-            // Assert
-            ArgumentCaptor<String> keyCaptor =
-                    ArgumentCaptor.forClass(String.class);
-
-            verify(kafkaTemplate).send(
-                    eq(TOPIC),
-                    keyCaptor.capture(),
-                    eq(event)
-            );
-
-            assertThat(keyCaptor.getValue())
-                    .isEqualTo("partition-key");
-        }
-
-        @Test
-        @DisplayName("publishes exactly one Kafka message")
+        @DisplayName("publishes exactly one message")
         void publishesExactlyOneMessage() {
-
-            // Arrange
             UrlClickEvent event = buildEvent("single-send");
 
-            // Act
             analyticsProducer.recordClick(event);
 
-            // Assert
-            verify(kafkaTemplate, times(1))
-                    .send(anyString(), anyString(), any(UrlClickEvent.class));
+            verify(rabbitTemplate, times(1))
+                    .convertAndSend(anyString(), anyString(), any(UrlClickEvent.class));
 
-            verifyNoMoreInteractions(kafkaTemplate);
-        }
-
-        @Test
-        @DisplayName("passes the exact same event instance to Kafka")
-        void passesSameEventInstance() {
-
-            // Arrange
-            UrlClickEvent event = buildEvent("same-instance");
-
-            // Act
-            analyticsProducer.recordClick(event);
-
-            // Assert
-            ArgumentCaptor<UrlClickEvent> eventCaptor =
-                    ArgumentCaptor.forClass(UrlClickEvent.class);
-
-            verify(kafkaTemplate).send(
-                    eq(TOPIC),
-                    eq("same-instance"),
-                    eventCaptor.capture()
-            );
-
-            assertThat(eventCaptor.getValue())
-                    .isSameAs(event);
-        }
-
-        @Test
-        @DisplayName("supports publishing event with nullable optional fields")
-        void supportsNullableFields() {
-
-            // Arrange
-            UrlClickEvent event = UrlClickEvent.builder()
-                    .shortCode("minimal")
-                    .build();
-
-            // Act
-            analyticsProducer.recordClick(event);
-
-            // Assert
-            verify(kafkaTemplate).send(
-                    TOPIC,
-                    "minimal",
-                    event
-            );
+            verifyNoMoreInteractions(rabbitTemplate);
         }
 
         @Test
         @DisplayName("publishes multiple events independently")
         void publishesMultipleEventsIndependently() {
+            UrlClickEvent first = buildEvent("code-1");
+            UrlClickEvent second = buildEvent("code-2");
 
-            // Arrange
-            UrlClickEvent firstEvent = buildEvent("code-1");
-            UrlClickEvent secondEvent = buildEvent("code-2");
+            analyticsProducer.recordClick(first);
+            analyticsProducer.recordClick(second);
 
-            // Act
-            analyticsProducer.recordClick(firstEvent);
-            analyticsProducer.recordClick(secondEvent);
+            verify(rabbitTemplate).convertAndSend(
+                    RabbitMQConfig.CLICK_EXCHANGE, RabbitMQConfig.CLICK_ROUTING_KEY, first);
+            verify(rabbitTemplate).convertAndSend(
+                    RabbitMQConfig.CLICK_EXCHANGE, RabbitMQConfig.CLICK_ROUTING_KEY, second);
 
-            // Assert
-            verify(kafkaTemplate).send(TOPIC, "code-1", firstEvent);
-            verify(kafkaTemplate).send(TOPIC, "code-2", secondEvent);
+            verify(rabbitTemplate, times(2))
+                    .convertAndSend(anyString(), anyString(), any(UrlClickEvent.class));
+        }
 
-            verify(kafkaTemplate, times(2))
-                    .send(anyString(), anyString(), any(UrlClickEvent.class));
+        @Test
+        @DisplayName("supports publishing event with nullable optional fields")
+        void supportsNullableFields() {
+            UrlClickEvent event = UrlClickEvent.builder()
+                    .shortCode("minimal")
+                    .build();
+
+            analyticsProducer.recordClick(event);
+
+            verify(rabbitTemplate).convertAndSend(
+                    RabbitMQConfig.CLICK_EXCHANGE,
+                    RabbitMQConfig.CLICK_ROUTING_KEY,
+                    event
+            );
         }
     }
 }

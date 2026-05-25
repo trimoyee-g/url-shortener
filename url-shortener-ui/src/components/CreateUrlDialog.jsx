@@ -96,7 +96,7 @@ export default function CreateUrlDialog({ open, onClose, token, onCreated }) {
           gap: 1.5,
         }}
       >
-        <Plus size={20} color="#00FF94" />
+        <Plus size={20} color="#38BDF8" />
         Shorten URL
       </DialogTitle>
 
