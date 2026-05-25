@@ -4,11 +4,11 @@
 
 **High-throughput URL shortening with sub-millisecond redirects, distributed rate limiting, and full observability.**
 
-A production-oriented URL shortener built with Java, Spring Boot, React, Redis, Kafka, MySQL, Docker, Prometheus, and Grafana. Designed for high-concurrency URL generation, ultra-fast cached redirects, asynchronous analytics, and resilient distributed caching.
+A production-oriented URL shortener built with Java, Spring Boot, React, Redis, RabbitMQ, MySQL, Docker, Prometheus, and Grafana. Designed for high-concurrency URL generation, ultra-fast cached redirects, asynchronous analytics, and resilient distributed caching.
 
 [![Java](https://img.shields.io/badge/Java-17-orange?style=flat-square&logo=openjdk)](https://openjdk.org/projects/jdk/17/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.3-green?style=flat-square&logo=springboot)](https://spring.io/projects/spring-boot)
-[![React](https://img.shields.io/badge/React-18-blue?style=flat-square&logo=react)](https://react.dev)
+[![React](https://img.shields.io/badge/React-19-blue?style=flat-square&logo=react)](https://react.dev)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
 </div>
@@ -37,9 +37,10 @@ A production-oriented URL shortener built with Java, Spring Boot, React, Redis, 
 A URL shortener built to handle real production load — not just a CRUD app. Key design goals:
 
 - **Sub-millisecond redirects** via Redis-first caching with Cuckoo Filter cache penetration protection
-- **Asynchronous write path** — Kafka decouples URL creation from database persistence, eliminating write-path latency
+- **Synchronous write path** — URL records are persisted to MySQL immediately on creation, ensuring instant readability with zero consistency lag
+- **Asynchronous analytics** — click events are published to RabbitMQ and processed off the hot redirect path, so redirect latency is never blocked by analytics writes
 - **Distributed rate limiting** — leaky bucket via Redis Lua scripts, enforced atomically across all instances
-- **Full observability** — Prometheus and Grafana tracking P95/P99 latencies, cache hit ratios, and Kafka consumer lag
+- **Full observability** — Prometheus and Grafana tracking P95/P99 latencies, cache hit ratios, and queue depth
 - **Load tested** — verified at 1500 concurrent users, 1232 req/s at peak, sub-139ms P95 redirect latency
 
 ---
@@ -59,16 +60,12 @@ Spring Boot API
       │        │ NO
       │  Snowflake ID + Base62 → shortCode
       │
-      ├──────────────────────────────────┐
-      │ async                            │ sync (immediate readability)
-      ▼                                  ▼
-Kafka [url-creations]          Redis (URL cache)
-      │                      + Cuckoo Filter (stored in Redis Stack)
-      ▼ async
-UrlCreateConsumer
-      ├─→ MySQL         (persist URL record)
+      ├─→ MySQL         (persist URL record — synchronous)
       ├─→ Redis         (cache URL)
       └─→ Cuckoo Filter (add short code)
+            │
+            ▼
+      Return short URL immediately
 ```
 
 ### Read Path — Redirect
@@ -85,15 +82,13 @@ Client  GET /{shortCode}
            │        │ MISS
            └─ 3. MySQL → repopulate Redis ──────────────── 302 Redirect
            │
-           │ (non-blocking)
+           │ (non-blocking, fire-and-forget)
            ▼
-     GeoIP lookup (MaxMind)
-           │
-           ▼
-     Kafka [url-clicks]
+     RabbitMQ [url.clicks.exchange]
            │ async
            ▼
      AnalyticsConsumer
+           ├─ GeoIP lookup (MaxMind)
            ├─→ MySQL   (persist ClickEvent)
            └─→ Redis   (increment click counter)
 ```
@@ -122,12 +117,12 @@ Spring Boot (Micrometer) → Prometheus → Grafana
 
 | Category | Technologies |
 |---|---|
-| Frontend | React 18, Vite, Material UI |
+| Frontend | React 19, Vite, Material UI |
 | Backend | Java 17, Spring Boot |
 | Security | Spring Security, JWT |
 | Database | MySQL |
 | Caching | Redis Stack (Cuckoo Filter via CF commands) |
-| Messaging | Apache Kafka (KRaft) |
+| Messaging | RabbitMQ (Spring AMQP) |
 | Monitoring | Prometheus, Grafana |
 | Containerization | Docker, Docker Compose |
 | Testing | JUnit 5, Mockito, RestAssured, Testcontainers, Awaitility |
@@ -147,12 +142,12 @@ Load tested using k6 with 1,000 concurrent virtual users
 | Redirect P95 latency | 56.89ms   |
 | Redirect P99 latency | 119.68ms  |
 | Redirect success rate | 100%      |
-| Shorten P95 latency | 445.53ms  |
-| Shorten P99 latency | 885.43s   |
+| Shorten P95 latency | 117.57ms  |
+| Shorten P99 latency | 251.03s   |
 | Shorten success rate | 100%      |
-| Peak throughput | 546 req/s |
-| Total requests served | 380K+     |
-| Rate-limited requests absorbed | 78,534    |
+| Peak throughput | 548 req/s |
+| Total requests served | 383K+     |
+| Rate-limited requests absorbed | 84,574    |
 
 Metrics were tracked live using Prometheus and Grafana during the test.  
 The distributed rate limiter successfully absorbed burst traffic (HTTP 429 responses) without affecting system stability or request success rates.
@@ -193,7 +188,7 @@ Unlike a Bloom Filter, the Cuckoo Filter supports deletion. When a URL is delete
 
 **Cache-aside** on miss — queries MySQL, writes result back to Redis for subsequent requests.
 
-**Write-through** on URL creation — Redis and Cuckoo Filter updated immediately after Kafka publish, ensuring no stale reads on newly created URLs.
+**Write-through** on URL creation — MySQL, Redis, and the Cuckoo Filter are all updated synchronously during the shorten request, so newly created URLs are immediately readable with no consistency window.
 
 ---
 
@@ -210,12 +205,12 @@ Distributed leaky bucket algorithm implemented via Redis Lua scripts — atomic 
 
 ## Analytics Pipeline
 
-Kafka-based asynchronous event streaming decouples analytics from the critical request path:
+RabbitMQ-based asynchronous event streaming decouples analytics from the critical request path:
 
-- URL creation events published to Kafka immediately on request
-- Click events streamed asynchronously — redirect latency is never blocked by analytics writes
-- Consumer group processes events independently, providing resilience under load
+- Click events are published to a RabbitMQ direct exchange immediately after redirect, without blocking the response
+- The `AnalyticsConsumer` processes events off the queue: performs GeoIP lookup, persists a `ClickEvent` to MySQL, and increments the per-URL click counter in Redis
 - Per-URL click counts, geographic breakdown, and clicks-by-day tracked in the dashboard
+- RabbitMQ's task queue model (message deleted after ACK) is a natural fit: each click event needs to be processed exactly once with no need for replay or multiple consumer groups
 
 ---
 
@@ -225,7 +220,7 @@ Follows the testing pyramid with three layers:
 
 **Unit tests** — isolated testing of services, controllers, repositories, JWT logic, Base62 encoder, Snowflake ID generator, and rate limiter logic using JUnit 5 and Mockito.
 
-**Integration tests** — verifies interaction between Spring Boot, MySQL, Redis Stack, and Kafka using Testcontainers, MockMvc, and Awaitility. Validates async event-driven workflows end-to-end.
+**Integration tests** — verifies interaction between Spring Boot, MySQL, Redis Stack, and RabbitMQ using Testcontainers, MockMvc, and Awaitility. Validates async event-driven workflows end-to-end.
 
 **End-to-end tests** — full black-box API testing via RestAssured against real infrastructure. Covers authentication, URL shortening, redirects, analytics, and authorization flows.
 
@@ -237,9 +232,9 @@ Prometheus and Grafana provide full-stack visibility:
 
 - Request throughput and error rates
 - P95/P99 latency per endpoint
-- Kafka consumer lag
 - Redis cache hit ratio
 - Redis performance metrics
+- RabbitMQ queue depth and consumer throughput
 
 Grafana is available at `http://localhost:3000` (default credentials: admin / admin).  
 The Prometheus datasource is provisioned automatically on first boot — no manual setup required.
@@ -250,7 +245,9 @@ The Prometheus datasource is provisioned automatically on first boot — no manu
 
 **Snowflake ID + Base62 encoding** — Snowflake generates distributed unique 64-bit IDs without coordination. Base62 encoding produces compact 7–10 character short codes with negligible collision probability at scale.
 
-**Kafka for write-path decoupling** — URL creation publishes to Kafka and returns immediately. The database consumer processes asynchronously, eliminating write-path latency from the user-facing response time.
+**Synchronous URL persistence** — URL records are written to MySQL, Redis, and the Cuckoo Filter in a single synchronous transaction during the shorten request. This eliminates the consistency window that an async approach creates: a URL is immediately resolvable after creation with no race between the write path and read path.
+
+**RabbitMQ for analytics** — click events are fire-and-forget from the redirect path's perspective. RabbitMQ's task queue model is the right fit: each message is consumed once and deleted on ACK, which is exactly the semantics analytics needs. Unlike a log-based broker, there is no offset to manage and no risk of replay buildup from consumer lag.
 
 **Redis Lua scripts for rate limiting** — Lua scripts execute atomically on Redis, ensuring the leaky bucket counter check-and-decrement is a single operation with no race conditions across instances.
 
@@ -321,7 +318,8 @@ MYSQL_ROOT_PASSWORD=your_password
 JWT_SECRET=your_secret
 REDIS_HOST=redis
 REDIS_PORT=6379
-KAFKA_SERVERS=kafka:9092
+RABBITMQ_USERNAME=guest
+RABBITMQ_PASSWORD=guest
 ```
 
 ### 3. Start the stack
@@ -330,7 +328,9 @@ KAFKA_SERVERS=kafka:9092
 docker compose up -d
 ```
 
-Builds the application image locally and starts MySQL, Redis Stack, Kafka, Prometheus, Grafana, and the Spring Boot backend. Grafana connects to Prometheus automatically — no manual datasource configuration needed.
+Builds the application image locally and starts MySQL, Redis Stack, RabbitMQ, Prometheus, Grafana, and the Spring Boot backend. Grafana connects to Prometheus automatically — no manual datasource configuration needed.
+
+RabbitMQ management UI is available at `http://localhost:15672` (default credentials: guest / guest).
 
 ### 4. Run the frontend
 
@@ -345,7 +345,7 @@ Frontend available at `http://localhost:5173`, backend at `http://localhost:8080
 ### Docker Hub
 
 ```bash
-docker pull trimoyeeg/url-shortener:v4
+docker pull trimoyeeg/url-shortener:v5
 ```
 
 ### Stopping

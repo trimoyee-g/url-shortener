@@ -35,28 +35,19 @@ services:
     networks:
       - app-network
 
-  kafka:
-    image: apache/kafka:latest
+  rabbitmq:
+    image: rabbitmq:3-management
     ports:
-      - "9092:9092"
+      - "5672:5672"
+      - "15672:15672"
     environment:
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_NODE_ID: 1
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
     healthcheck:
-      test: [ "CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092" ]
-      interval: 15s
-      timeout: 10s
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
       retries: 5
-      start_period: 30s
     restart: unless-stopped
     networks:
       - app-network
@@ -90,7 +81,7 @@ services:
 
   app:
     build: .
-    image: trimoyeeg/url-shortener:v4
+    image: trimoyeeg/url-shortener:v5
     ports:
       - "8080:8080"
     depends_on:
@@ -98,14 +89,16 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
+      rabbitmq:
         condition: service_healthy
     environment:
       SPRING_DATASOURCE_URL: ${DB_URL}?useSSL=false&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_DATA_REDIS_HOST: ${REDIS_HOST}
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_SERVERS}
+      SPRING_RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
     restart: unless-stopped
     networks:
       - app-network
