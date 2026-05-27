@@ -5,6 +5,7 @@ import com.urlshortener.url_shortener.dto.UnlockResponse;
 import com.urlshortener.url_shortener.dto.UrlClickEvent;
 import com.urlshortener.url_shortener.exception.PasswordRequiredException;
 import com.urlshortener.url_shortener.service.AnalyticsProducer;
+import com.urlshortener.url_shortener.service.GeoIpService;
 import com.urlshortener.url_shortener.service.UrlService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -21,6 +22,7 @@ public class RedirectController {
 
     private final UrlService urlService;
     private final AnalyticsProducer analyticsProducer;
+    private final GeoIpService geoIpService;
 
     @GetMapping("/{shortCode:[a-zA-Z0-9]+}")
     public void redirect(
@@ -42,11 +44,13 @@ public class RedirectController {
         // Publish click event — swallow any messaging errors so a RabbitMQ
         // blip never breaks a live redirect.
         try {
+            String ip = extractIp(request);
             analyticsProducer.recordClick(UrlClickEvent.builder()
                     .shortCode(shortCode)
-                    .ipAddress(extractIp(request))
+                    .ipAddress(ip)
                     .userAgent(request.getHeader("User-Agent"))
                     .referer(request.getHeader("Referer"))
+                    .country(geoIpService.getCountryCode(ip))
                     .build());
         } catch (Exception e) {
             log.warn("Analytics publish failed for {}: {}", shortCode, e.getMessage());
@@ -74,11 +78,13 @@ public class RedirectController {
 
         // Record the analytics click after successful unlock
         try {
+            String ip = extractIp(request);
             analyticsProducer.recordClick(UrlClickEvent.builder()
                     .shortCode(shortCode)
-                    .ipAddress(extractIp(request))
+                    .ipAddress(ip)
                     .userAgent(request.getHeader("User-Agent"))
                     .referer(request.getHeader("Referer"))
+                    .country(geoIpService.getCountryCode(ip))
                     .build());
         } catch (Exception e) {
             log.warn("Analytics publish failed for {}: {}", shortCode, e.getMessage());

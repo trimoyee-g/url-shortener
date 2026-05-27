@@ -7,29 +7,42 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.containers.RabbitMQContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
-@Testcontainers
 public abstract class BaseIntegrationTest {
 
-    @Container
+    // ── Singleton containers ──────────────────────────────────────────────────
+    // Started once for the entire test run (JVM lifecycle), not per test class.
+    //
+    // The previous pattern used @Testcontainers + @Container on static fields.
+    // That binds container lifecycle to JUnit 5 class lifecycle: when a class
+    // finishes, JUnit stops the containers. The next class then inherits a
+    // Spring context (from the cache) that still points to those now-dead
+    // containers → every DB call throws CannotCreateTransaction.
+    //
+    // The singleton pattern avoids this: containers start in the static block,
+    // live for the whole JVM, and are cleaned up by Testcontainers' own
+    // shutdown hook (Ryuk). Spring context caching works correctly because the
+    // ports never change between classes.
     static final MySQLContainer<?> mysql =
             new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
                     .withDatabaseName("url_shortener")
                     .withUsername("root")
                     .withPassword("root");
 
-    @Container
     static final RedisStackContainer redis =
             new RedisStackContainer(DockerImageName.parse("redis/redis-stack:latest"));
 
-    @Container
     static final RabbitMQContainer rabbitmq =
             new RabbitMQContainer(DockerImageName.parse("rabbitmq:3-management"));
+
+    static {
+        mysql.start();
+        redis.start();
+        rabbitmq.start();
+    }
 
     @DynamicPropertySource
     static void overrideProperties(DynamicPropertyRegistry registry) {

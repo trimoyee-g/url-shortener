@@ -111,7 +111,7 @@ class AnalyticsServiceTests {
                             new Object[]{"2026-01-02", 20L}
                     ));
 
-            when(clickEventRepository.countClicksByCountry(shortCode))
+            when(clickEventRepository.countClicksByReferrer(shortCode))
                     .thenReturn(Collections.singletonList(
                             new Object[]{null, 5L}
                     ));

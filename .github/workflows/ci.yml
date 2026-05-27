@@ -28,8 +28,10 @@ jobs:
       - name: Run tests
         run: mvn test -B
         env:
-          # Required by Spring Security config — use a dummy value for CI
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          # Hardcoded test-only value — Spring falls back to the application.yml default
+          # only when the variable is *unset*, not when it's an empty string, so we
+          # always supply an explicit value here to avoid context-startup failures.
+          JWT_SECRET: ci-dummy-secret-not-used-in-production
 
   # ── Frontend Lint + Build ────────────────────────────────────────────────────
   test-frontend:

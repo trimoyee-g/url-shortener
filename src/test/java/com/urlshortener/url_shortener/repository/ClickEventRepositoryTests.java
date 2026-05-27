@@ -58,13 +58,14 @@ public class ClickEventRepositoryTests {
     private void insertClickEvent(String shortCode, String ipAddress, String country, Instant clickedAt) {
         entityManager.createNativeQuery("""
                 INSERT INTO click_events
-                (short_code, ip_address, country, clicked_at)
-                VALUES (?, ?, ?, ?)
+                (short_code, ip_address, country, clicked_at, device_type)
+                VALUES (?, ?, ?, ?, ?)
                 """)
                 .setParameter(1, shortCode)
                 .setParameter(2, ipAddress)
                 .setParameter(3, country)
                 .setParameter(4, Timestamp.from(clickedAt))
+                .setParameter(5, "DESKTOP")
                 .executeUpdate();
     }
 
