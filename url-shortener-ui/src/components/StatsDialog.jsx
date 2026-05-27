@@ -24,9 +24,25 @@ function MiniAreaChart({ data }) {
   const values  = entries.map(([, v]) => v);
   const max     = Math.max(...values, 1);
   const W = 500, H = 80, PAD = 2;
+
+  // Single data point — show a centred dot + label instead of an invisible line
+  if (entries.length === 1) {
+    return (
+      <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center",
+        justifyContent: "center", height: H, gap: 0.5 }}>
+        <Box sx={{ width: 8, height: 8, borderRadius: "50%", background: "#38BDF8" }} />
+        <Typography variant="caption"
+          sx={{ color: "#38BDF8", fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.65rem" }}>
+          {values[0]} click{values[0] !== 1 ? "s" : ""} · {entries[0][0].slice(5)}
+        </Typography>
+      </Box>
+    );
+  }
+
+  const TPAD = 22, BPAD = 4, HPAD = 4;
   const pts = entries.map(([, v], i) => {
-    const x = PAD + (i / Math.max(entries.length - 1, 1)) * (W - PAD * 2);
-    const y = H - PAD - ((v / max) * (H - PAD * 2));
+    const x = HPAD + (i / (entries.length - 1)) * (W - HPAD * 2);
+    const y = H - BPAD - ((v / max) * (H - TPAD - BPAD));
     return [x, y];
   });
   const polyline = pts.map((p) => p.join(",")).join(" ");
@@ -34,17 +50,54 @@ function MiniAreaChart({ data }) {
     pts.map((p) => `L${p[0]},${p[1]}`).join(" ") +
     ` L${pts[pts.length - 1][0]},${H} Z`;
 
+  const step       = Math.max(1, Math.floor(entries.length / 6));
+  const tickIndices = new Set(entries.map((_, i) => i).filter(i => i % step === 0 || i === entries.length - 1));
+  const ticks      = entries.filter((_, i) => tickIndices.has(i));
+  const showLabel  = entries.length <= 15 ? () => true : (i) => tickIndices.has(i);
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: 80 }} preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="sgr" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor="#38BDF8" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#38BDF8" stopOpacity="0"    />
-        </linearGradient>
-      </defs>
-      <path d={area}     fill="url(#sgr)" />
-      <polyline points={polyline} fill="none" stroke="#38BDF8" strokeWidth="1.5" />
-    </svg>
+    <Box sx={{ width: "100%", position: "relative" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: H }} preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="sgr" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stopColor="#38BDF8" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="#38BDF8" stopOpacity="0"    />
+          </linearGradient>
+        </defs>
+        <path d={area}     fill="url(#sgr)" />
+        <polyline points={polyline} fill="none" stroke="#38BDF8" strokeWidth="1.5" />
+        {pts.map(([x, y], i) => (
+          <circle key={i} cx={x} cy={y} r="2.5" fill="#38BDF8" opacity="0.8" />
+        ))}
+      </svg>
+
+      {/* value labels above each dot */}
+      {pts.map(([x, y], i) => showLabel(i) && (
+        <Typography key={i} variant="caption" sx={{
+          position: "absolute",
+          left: `${(x / W) * 100}%`,
+          top:  `${y - 18}px`,
+          transform: "translateX(-50%)",
+          fontSize: "0.58rem",
+          color: "#38BDF8",
+          fontFamily: "'IBM Plex Mono', monospace",
+          pointerEvents: "none",
+          lineHeight: 1,
+        }}>
+          {values[i]}
+        </Typography>
+      ))}
+
+      {/* date labels */}
+      <Box sx={{ display: "flex", justifyContent: "space-between", mt: 0.5 }}>
+        {ticks.map(([day]) => (
+          <Typography key={day} variant="caption"
+            sx={{ color: "#7D8590", fontSize: "0.6rem", fontFamily: "'IBM Plex Mono', monospace" }}>
+            {day.slice(5)}
+          </Typography>
+        ))}
+      </Box>
+    </Box>
   );
 }
 
@@ -207,7 +260,7 @@ export default function StatsDialog({ open, onClose, token, url }) {
                     CLICKS OVER TIME
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {fmtNum(stats.totalClicks)} total
+                    {fmtNum(Object.values(stats.clicksByDay).reduce((s, v) => s + v, 0))} total
                   </Typography>
                 </Box>
                 <MiniAreaChart data={stats.clicksByDay} />
@@ -225,8 +278,8 @@ export default function StatsDialog({ open, onClose, token, url }) {
                   </Typography>
                   <Stack spacing={1.5}>
                     {stats.topCountries.slice(0, 5).map((c, i) => {
-                      const pct = stats.totalClicks > 0
-                        ? (c.clicks / stats.totalClicks) * 100 : 0;
+                      const total = stats.topCountries.reduce((s, x) => s + x.clicks, 0) || 1;
+                      const pct = (c.clicks / total) * 100;
                       return (
                         <Box key={i}>
                           <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
@@ -257,8 +310,8 @@ export default function StatsDialog({ open, onClose, token, url }) {
                   </Typography>
                   <Stack spacing={1.5}>
                     {Object.entries(stats.deviceBreakdown).map(([key, count]) => {
-                      const pct = stats.totalClicks > 0
-                        ? (count / stats.totalClicks) * 100 : 0;
+                      const total = Object.values(stats.deviceBreakdown).reduce((s, v) => s + v, 0) || 1;
+                      const pct = (count / total) * 100;
                       return (
                         <Box key={key}>
                           <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
@@ -294,16 +347,18 @@ export default function StatsDialog({ open, onClose, token, url }) {
                   </Typography>
                   <Stack spacing={1.5}>
                     {stats.topReferrers.slice(0, 5).map((r, i) => {
-                      const pct = stats.totalClicks > 0
-                        ? (r.clicks / stats.totalClicks) * 100 : 0;
+                      const total = stats.topReferrers.reduce((s, x) => s + x.clicks, 0) || 1;
+                      const pct = (r.clicks / total) * 100;
                       return (
                         <Box key={i}>
                           <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
-                            <Typography variant="caption" sx={{
-                              maxWidth: 130, overflow: "hidden",
-                              textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {r.referrer}
-                            </Typography>
+                            <Tooltip title={r.referrer} placement="top" enterDelay={400}>
+                              <Typography variant="caption" sx={{
+                                flex: 1, minWidth: 0, overflow: "hidden",
+                                textOverflow: "ellipsis", whiteSpace: "nowrap", mr: 1 }}>
+                                {r.referrer}
+                              </Typography>
+                            </Tooltip>
                             <Typography variant="caption" color="text.secondary">
                               {fmtNum(r.clicks)} · {pct.toFixed(1)}%
                             </Typography>

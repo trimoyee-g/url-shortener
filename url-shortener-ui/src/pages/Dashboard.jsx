@@ -47,11 +47,11 @@ function AreaChart({ data, height = 120 }) {
   const entries = Object.entries(data).sort(([a], [b]) => a.localeCompare(b));
   const values  = entries.map(([, v]) => Number(v));
   const max     = Math.max(...values, 1);
-  const W = 600, H = height, PAD = 4;
+  const W = 600, H = height, TPAD = 22, BPAD = 4, HPAD = 4;
 
   const pts = entries.map(([, v], i) => {
-    const x = PAD + (i / Math.max(entries.length - 1, 1)) * (W - PAD * 2);
-    const y = H - PAD - ((v / max) * (H - PAD * 2));
+    const x = HPAD + (i / Math.max(entries.length - 1, 1)) * (W - HPAD * 2);
+    const y = H - BPAD - ((v / max) * (H - TPAD - BPAD));
     return [x, y];
   });
 
@@ -64,8 +64,14 @@ function AreaChart({ data, height = 120 }) {
   ].join(" ");
 
   // x-axis labels — show ~6 evenly spaced dates
-  const step  = Math.max(1, Math.floor(entries.length / 6));
-  const ticks = entries.filter((_, i) => i % step === 0 || i === entries.length - 1);
+  const step       = Math.max(1, Math.floor(entries.length / 6));
+  const tickIndices = new Set(entries.map((_, i) => i).filter(i => i % step === 0 || i === entries.length - 1));
+  const ticks      = entries.filter((_, i) => tickIndices.has(i));
+
+  // show value labels on all points when ≤15, otherwise only on ticks
+  const showLabel = entries.length <= 15
+    ? () => true
+    : (_, i) => tickIndices.has(i);
 
   return (
     <Box sx={{ width: "100%", position: "relative" }}>
@@ -80,20 +86,37 @@ function AreaChart({ data, height = 120 }) {
             <stop offset="100%" stopColor={C.cyan} stopOpacity="0"   />
           </linearGradient>
         </defs>
-        <path   d={area}    fill="url(#acgr)" />
+        <path d={area} fill="url(#acgr)" />
         <polyline points={linePts} fill="none" stroke={C.cyan} strokeWidth="2"
           strokeLinejoin="round" strokeLinecap="round" />
-        {/* dots on datapoints */}
         {pts.map(([x, y], i) => (
           <circle key={i} cx={x} cy={y} r="2.5" fill={C.cyan} opacity="0.7" />
         ))}
       </svg>
+
+      {/* value labels — absolutely positioned above each dot */}
+      {pts.map(([x, y], i) => showLabel(null, i) && (
+        <Typography key={i} variant="caption" sx={{
+          position: "absolute",
+          left: `${(x / W) * 100}%`,
+          top:  `${y - 18}px`,
+          transform: "translateX(-50%)",
+          fontSize: "0.58rem",
+          color: C.cyan,
+          fontFamily: "'IBM Plex Mono', monospace",
+          pointerEvents: "none",
+          lineHeight: 1,
+        }}>
+          {values[i]}
+        </Typography>
+      ))}
+
       {/* date labels */}
       <Box sx={{ display: "flex", justifyContent: "space-between", mt: 0.5 }}>
         {ticks.map(([day]) => (
           <Typography key={day} variant="caption"
             sx={{ color: C.muted, fontSize: "0.6rem", fontFamily: "'IBM Plex Mono', monospace" }}>
-            {day.slice(5)} {/* show MM-DD */}
+            {day.slice(5)}
           </Typography>
         ))}
       </Box>
@@ -229,6 +252,8 @@ function DashboardView({ token, snack }) {
   const [dashboard, setDashboard] = useState(null);
   const [dashLoading, setDashLoading] = useState(true);
   const [days, setDays] = useState(30);
+  const [showAllCountries, setShowAllCountries] = useState(false);
+  const [showAllReferrers, setShowAllReferrers] = useState(false);
 
   const loadDash = useCallback(async () => {
     setDashLoading(true);
@@ -336,29 +361,38 @@ function DashboardView({ token, snack }) {
             <Stack spacing={1}>{[0,1,2,3].map(i =>
               <Skeleton key={i} variant="text" height={28} />)}</Stack>
           ) : dashboard?.topCountries?.length ? (
-            <Stack spacing={1.5}>
-              {dashboard.topCountries.slice(0, 5).map((c, i) => {
-                const total = dashboard.totalClicks || 1;
-                const pct   = (c.clicks / total) * 100;
-                return (
-                  <Box key={i}>
-                    <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                        <Globe size={11} color={C.muted} />
-                        <Typography variant="caption">{c.country}</Typography>
+            <>
+              <Stack spacing={1.5}>
+                {(showAllCountries ? dashboard.topCountries : dashboard.topCountries.slice(0, 5)).map((c, i) => {
+                  const total = dashboard.topCountries.reduce((s, x) => s + x.clicks, 0) || 1;
+                  const pct   = (c.clicks / total) * 100;
+                  return (
+                    <Box key={i}>
+                      <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                          <Globe size={11} color={C.muted} />
+                          <Typography variant="caption">{c.country}</Typography>
+                        </Box>
+                        <Typography variant="caption" color="text.secondary">
+                          {fmtNum(c.clicks)} · {pct.toFixed(1)}%
+                        </Typography>
                       </Box>
-                      <Typography variant="caption" color="text.secondary">
-                        {fmtNum(c.clicks)} · {pct.toFixed(1)}%
-                      </Typography>
+                      <Box sx={{ height: 3, borderRadius: 2, background: C.border }}>
+                        <Box sx={{ height: 3, borderRadius: 2, background: C.cyan,
+                          width: `${pct}%`, transition: "width 0.5s" }} />
+                      </Box>
                     </Box>
-                    <Box sx={{ height: 3, borderRadius: 2, background: C.border }}>
-                      <Box sx={{ height: 3, borderRadius: 2, background: C.cyan,
-                        width: `${pct}%`, transition: "width 0.5s" }} />
-                    </Box>
-                  </Box>
-                );
-              })}
-            </Stack>
+                  );
+                })}
+              </Stack>
+              {dashboard.topCountries.length > 5 && (
+                <Button size="small" onClick={() => setShowAllCountries(v => !v)}
+                  sx={{ mt: 1.5, p: 0, minWidth: 0, color: C.muted, fontSize: "0.7rem",
+                    textTransform: "none", "&:hover": { color: C.cyan, background: "none" } }}>
+                  {showAllCountries ? "Show less" : `View all ${dashboard.topCountries.length}`}
+                </Button>
+              )}
+            </>
           ) : (
             <Typography variant="caption" color="text.secondary">No data yet</Typography>
           )}
@@ -376,7 +410,7 @@ function DashboardView({ token, snack }) {
           ) : dashboard?.deviceBreakdown ? (
             <Stack spacing={1.5}>
               {Object.entries(dashboard.deviceBreakdown).map(([key, count]) => {
-                const total = dashboard.totalClicks || 1;
+                const total = Object.values(dashboard.deviceBreakdown).reduce((s, v) => s + v, 0) || 1;
                 const pct   = (count / total) * 100;
                 const color = key === "MOBILE" ? C.blue : key === "TABLET" ? C.amber : C.cyan;
                 const Icon  = key === "MOBILE" ? Smartphone : key === "TABLET" ? Tablet : Monitor;
@@ -418,30 +452,41 @@ function DashboardView({ token, snack }) {
             <Stack spacing={1}>{[0,1,2,3].map(i =>
               <Skeleton key={i} variant="text" height={28} />)}</Stack>
           ) : dashboard?.topReferrers?.length ? (
-            <Stack spacing={1.5}>
-              {dashboard.topReferrers.slice(0, 5).map((r, i) => {
-                const total = dashboard.totalClicks || 1;
-                const pct   = (r.clicks / total) * 100;
-                return (
-                  <Box key={i}>
-                    <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
-                      <Typography variant="caption"
-                        sx={{ maxWidth: 130, overflow: "hidden",
-                          textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {r.referrer}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {fmtNum(r.clicks)} · {pct.toFixed(1)}%
-                      </Typography>
+            <>
+              <Stack spacing={1.5}>
+                {(showAllReferrers ? dashboard.topReferrers : dashboard.topReferrers.slice(0, 5)).map((r, i) => {
+                  const total = dashboard.topReferrers.reduce((s, x) => s + x.clicks, 0) || 1;
+                  const pct   = (r.clicks / total) * 100;
+                  return (
+                    <Box key={i}>
+                      <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
+                        <Tooltip title={r.referrer} placement="top" enterDelay={400}>
+                          <Typography variant="caption"
+                            sx={{ flex: 1, minWidth: 0, overflow: "hidden",
+                              textOverflow: "ellipsis", whiteSpace: "nowrap", mr: 1 }}>
+                            {r.referrer}
+                          </Typography>
+                        </Tooltip>
+                        <Typography variant="caption" color="text.secondary">
+                          {fmtNum(r.clicks)} · {pct.toFixed(1)}%
+                        </Typography>
+                      </Box>
+                      <Box sx={{ height: 3, borderRadius: 2, background: C.border }}>
+                        <Box sx={{ height: 3, borderRadius: 2, background: C.violet,
+                          width: `${pct}%`, transition: "width 0.5s" }} />
+                      </Box>
                     </Box>
-                    <Box sx={{ height: 3, borderRadius: 2, background: C.border }}>
-                      <Box sx={{ height: 3, borderRadius: 2, background: C.violet,
-                        width: `${pct}%`, transition: "width 0.5s" }} />
-                    </Box>
-                  </Box>
-                );
-              })}
-            </Stack>
+                  );
+                })}
+              </Stack>
+              {dashboard.topReferrers.length > 5 && (
+                <Button size="small" onClick={() => setShowAllReferrers(v => !v)}
+                  sx={{ mt: 1.5, p: 0, minWidth: 0, color: C.muted, fontSize: "0.7rem",
+                    textTransform: "none", "&:hover": { color: C.violet, background: "none" } }}>
+                  {showAllReferrers ? "Show less" : `View all ${dashboard.topReferrers.length}`}
+                </Button>
+              )}
+            </>
           ) : (
             <Typography variant="caption" color="text.secondary">No data yet</Typography>
           )}

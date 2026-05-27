@@ -37,22 +37,22 @@ public class AnalyticsService {
      * @param days      rolling window in days (7, 30, 90)
      */
     public AnalyticsResponse getStats(String shortCode, int days) {
-        urlRepository.findByShortCodeAndActiveTrue(shortCode)
+        var url = urlRepository.findByShortCodeAndActiveTrue(shortCode)
                 .orElseThrow(() -> new UrlNotFoundException(shortCode));
 
         Instant since = Instant.now().minus(Duration.ofDays(days));
 
-        long total  = getClickCount(shortCode);
-        long unique = clickEventRepository.countUniqueIpsByShortCode(shortCode);
+        long total  = clickEventRepository.countClicksSince(shortCode, since);
+        long unique = clickEventRepository.countUniqueIpsSince(shortCode, since);
 
         List<AnalyticsResponse.CountryCount> countries = toCountryCounts(
-                clickEventRepository.countClicksByCountry(shortCode));
+                clickEventRepository.countClicksByCountrySince(shortCode, since));
 
         List<AnalyticsResponse.ReferrerCount> referrers = toReferrerCounts(
-                clickEventRepository.countClicksByReferrer(shortCode));
+                clickEventRepository.countClicksByReferrerSince(shortCode, since));
 
         Map<String, Long> deviceBreakdown = toDeviceMap(
-                clickEventRepository.countClicksByDevice(shortCode));
+                clickEventRepository.countClicksByDeviceSince(shortCode, since));
 
         Map<String, Long> byDay = toDayMap(
                 clickEventRepository.countClicksByDay(shortCode, since));
@@ -60,6 +60,7 @@ public class AnalyticsService {
         return AnalyticsResponse.builder()
                 .shortCode(shortCode)
                 .shortUrl(baseUrl + "/" + shortCode)
+                .longUrl(url.getLongUrl())
                 .totalClicks(total)
                 .uniqueVisitors(unique)
                 .topCountries(countries)

@@ -15,17 +15,21 @@ public interface ClickEventRepository extends JpaRepository<ClickEvent, Long> {
 
     long countByShortCode(String shortCode);
 
-    @Query("SELECT COUNT(DISTINCT c.ipAddress) FROM ClickEvent c WHERE c.shortCode = :code")
-    long countUniqueIpsByShortCode(@Param("code") String shortCode);
+    @Query("SELECT COUNT(c) FROM ClickEvent c WHERE c.shortCode = :code AND c.clickedAt >= :since")
+    long countClicksSince(@Param("code") String shortCode, @Param("since") Instant since);
+
+    @Query("SELECT COUNT(DISTINCT c.ipAddress) FROM ClickEvent c WHERE c.shortCode = :code AND c.clickedAt >= :since")
+    long countUniqueIpsSince(@Param("code") String shortCode, @Param("since") Instant since);
 
     @Query("""
         SELECT c.country, COUNT(c) AS cnt
         FROM ClickEvent c
-        WHERE c.shortCode = :code
+        WHERE c.shortCode = :code AND c.clickedAt >= :since
         GROUP BY c.country
         ORDER BY cnt DESC
         """)
-    List<Object[]> countClicksByCountry(@Param("code") String shortCode);
+    List<Object[]> countClicksByCountrySince(@Param("code") String shortCode,
+                                             @Param("since") Instant since);
 
     @Query("""
         SELECT CAST(c.clickedAt AS date), COUNT(c)
@@ -40,20 +44,22 @@ public interface ClickEventRepository extends JpaRepository<ClickEvent, Long> {
     @Query("""
         SELECT c.deviceType, COUNT(c) AS cnt
         FROM ClickEvent c
-        WHERE c.shortCode = :code
+        WHERE c.shortCode = :code AND c.clickedAt >= :since
         GROUP BY c.deviceType
         ORDER BY cnt DESC
         """)
-    List<Object[]> countClicksByDevice(@Param("code") String shortCode);
+    List<Object[]> countClicksByDeviceSince(@Param("code") String shortCode,
+                                            @Param("since") Instant since);
 
     @Query("""
         SELECT COALESCE(c.referrer, 'Direct'), COUNT(c) AS cnt
         FROM ClickEvent c
-        WHERE c.shortCode = :code
+        WHERE c.shortCode = :code AND c.clickedAt >= :since
         GROUP BY c.referrer
         ORDER BY cnt DESC
         """)
-    List<Object[]> countClicksByReferrer(@Param("code") String shortCode);
+    List<Object[]> countClicksByReferrerSince(@Param("code") String shortCode,
+                                              @Param("since") Instant since);
 
     // ── User-scoped dashboard queries ─────────────────────────────────────────
 

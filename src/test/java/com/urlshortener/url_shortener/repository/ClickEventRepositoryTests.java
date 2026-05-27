@@ -123,11 +123,11 @@ public class ClickEventRepositoryTests {
         assertThat(clickEventRepository.countByShortCode(SHORT_CODE)).isZero();
     }
 
-    // countUniqueIpsByShortCode
+    // countUniqueIpsSince
 
     @Test
-    @DisplayName("countUniqueIpsByShortCode returns unique IP count")
-    public void ClickEventRepository_countUniqueIpsByShortCode_returnsUniqueIpCount() {
+    @DisplayName("countUniqueIpsSince returns unique IP count within window")
+    public void ClickEventRepository_countUniqueIpsSince_returnsUniqueIpCount() {
 
         // Arrange
         clickEventRepository.saveAllAndFlush(List.of(
@@ -137,21 +137,21 @@ public class ClickEventRepositoryTests {
         ));
 
         // Act
-        long uniqueCount = clickEventRepository.countUniqueIpsByShortCode(SHORT_CODE);
+        long uniqueCount = clickEventRepository.countUniqueIpsSince(SHORT_CODE, JAN_2020);
 
         // Assert
         assertThat(uniqueCount).isEqualTo(2);
     }
 
     @Test
-    @DisplayName("countUniqueIpsByShortCode returns zero when no clicks exist")
-    public void ClickEventRepository_countUniqueIpsByShortCode_returnsZeroIfNoClicksExist() {
-        assertThat(clickEventRepository.countUniqueIpsByShortCode("unknown")).isZero();
+    @DisplayName("countUniqueIpsSince returns zero when no clicks exist")
+    public void ClickEventRepository_countUniqueIpsSince_returnsZeroIfNoClicksExist() {
+        assertThat(clickEventRepository.countUniqueIpsSince("unknown", JAN_2020)).isZero();
     }
 
     @Test
-    @DisplayName("countUniqueIpsByShortCode does not count other shortcodes")
-    public void ClickEventRepository_countUniqueIpsByShortCode_doesNotCountOtherShortCodes() {
+    @DisplayName("countUniqueIpsSince does not count other shortcodes")
+    public void ClickEventRepository_countUniqueIpsSince_doesNotCountOtherShortCodes() {
 
         // Arrange
         clickEventRepository.saveAndFlush(
@@ -159,14 +159,25 @@ public class ClickEventRepositoryTests {
         );
 
         // Act & Assert
-        assertThat(clickEventRepository.countUniqueIpsByShortCode(SHORT_CODE)).isZero();
+        assertThat(clickEventRepository.countUniqueIpsSince(SHORT_CODE, JAN_2020)).isZero();
     }
 
-    // countClicksByCountry
+    @Test
+    @DisplayName("countUniqueIpsSince excludes clicks before since date")
+    public void ClickEventRepository_countUniqueIpsSince_excludesClicksBeforeSince() {
+
+        // Arrange — click in 2020, query from 2026
+        insertClickEvent(SHORT_CODE, "192.168.1.1", "IN", JAN_2020);
+
+        // Act & Assert
+        assertThat(clickEventRepository.countUniqueIpsSince(SHORT_CODE, JAN_2026)).isZero();
+    }
+
+    // countClicksByCountrySince
 
     @Test
-    @DisplayName("countClicksByCountry returns grouped country counts")
-    public void ClickEventRepository_countClicksByCountry_returnsGroupedCountryCounts() {
+    @DisplayName("countClicksByCountrySince returns grouped country counts")
+    public void ClickEventRepository_countClicksByCountrySince_returnsGroupedCountryCounts() {
 
         // Arrange
         clickEventRepository.saveAllAndFlush(List.of(
@@ -177,7 +188,7 @@ public class ClickEventRepositoryTests {
 
         // Act
         Map<String, Long> countsByCountry =
-                mapCountryCounts(clickEventRepository.countClicksByCountry(SHORT_CODE));
+                mapCountryCounts(clickEventRepository.countClicksByCountrySince(SHORT_CODE, JAN_2020));
 
         // Assert
         assertThat(countsByCountry)
@@ -185,14 +196,14 @@ public class ClickEventRepositoryTests {
     }
 
     @Test
-    @DisplayName("countClicksByCountry returns empty list when no clicks exist")
-    public void ClickEventRepository_countClicksByCountry_returnsEmptyListIfNoClicksExist() {
-        assertThat(clickEventRepository.countClicksByCountry("unknown")).isEmpty();
+    @DisplayName("countClicksByCountrySince returns empty list when no clicks exist")
+    public void ClickEventRepository_countClicksByCountrySince_returnsEmptyListIfNoClicksExist() {
+        assertThat(clickEventRepository.countClicksByCountrySince("unknown", JAN_2020)).isEmpty();
     }
 
     @Test
-    @DisplayName("countClicksByCountry does not count other shortcodes")
-    public void ClickEventRepository_countClicksByCountry_doesNotCountOtherShortCodes() {
+    @DisplayName("countClicksByCountrySince does not count other shortcodes")
+    public void ClickEventRepository_countClicksByCountrySince_doesNotCountOtherShortCodes() {
 
         // Arrange
         clickEventRepository.saveAndFlush(
@@ -200,7 +211,18 @@ public class ClickEventRepositoryTests {
         );
 
         // Act & Assert
-        assertThat(clickEventRepository.countClicksByCountry(SHORT_CODE)).isEmpty();
+        assertThat(clickEventRepository.countClicksByCountrySince(SHORT_CODE, JAN_2020)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("countClicksByCountrySince excludes clicks before since date")
+    public void ClickEventRepository_countClicksByCountrySince_excludesClicksBeforeSince() {
+
+        // Arrange — click in 2020, query from 2026
+        insertClickEvent(SHORT_CODE, "192.168.1.1", "IN", JAN_2020);
+
+        // Act & Assert
+        assertThat(clickEventRepository.countClicksByCountrySince(SHORT_CODE, JAN_2026)).isEmpty();
     }
 
     // countClicksByDay
