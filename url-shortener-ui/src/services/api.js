@@ -1,4 +1,7 @@
 const BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api/v1";
+// Unlock lives at the root (no /api/v1 prefix)
+const ROOT = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api/v1")
+  .replace(/\/api\/v1$/, "");
 
 export const api = {
   async register(email, password, name) {
@@ -22,7 +25,8 @@ export const api = {
     return r.json();
   },
 
-  async shorten(token, longUrl, customAlias, ttlSeconds) {
+  async shorten(token, longUrl, customAlias, ttlSeconds, opts = {}) {
+    const { utmSource, utmMedium, utmCampaign, password } = opts;
     const r = await fetch(`${BASE}/urls/shorten`, {
       method: "POST",
       headers: {
@@ -33,13 +37,18 @@ export const api = {
         longUrl,
         customAlias: customAlias || null,
         ttlSeconds: ttlSeconds || null,
+        utmSource: utmSource || null,
+        utmMedium: utmMedium || null,
+        utmCampaign: utmCampaign || null,
+        password: password || null,
       }),
     });
     if (!r.ok) {
       const body = await r.json();
-      const msg = body.message && typeof body.message === "object"
-        ? Object.values(body.message).join("; ")
-        : body.message || "Failed to shorten";
+      const msg =
+        body.message && typeof body.message === "object"
+          ? Object.values(body.message).join("; ")
+          : body.message || "Failed to shorten";
       throw new Error(msg);
     }
     return r.json();
@@ -53,11 +62,19 @@ export const api = {
     return r.json();
   },
 
-  async getStats(token, shortCode) {
-    const r = await fetch(`${BASE}/urls/${shortCode}/stats`, {
+  async getStats(token, shortCode, days = 30) {
+    const r = await fetch(`${BASE}/urls/${shortCode}/stats?days=${days}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!r.ok) throw new Error("Failed to fetch stats");
+    return r.json();
+  },
+
+  async getDashboard(token, days = 30) {
+    const r = await fetch(`${BASE}/analytics/dashboard?days=${days}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) throw new Error("Failed to fetch dashboard");
     return r.json();
   },
 
@@ -76,5 +93,22 @@ export const api = {
     if (!r.ok) throw new Error("Failed to generate QR");
     const blob = await r.blob();
     return URL.createObjectURL(blob);
+  },
+
+  /**
+   * Unlock a password-protected short link.
+   * Returns { shortCode, redirectUrl }
+   */
+  async unlock(shortCode, password) {
+    const r = await fetch(`${ROOT}/${shortCode}/unlock`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      throw new Error(body.message || "Incorrect password");
+    }
+    return r.json();
   },
 };

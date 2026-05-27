@@ -1,99 +1,75 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState } from "react";
 import {
-  Box, Typography, Card, Tabs, Tab, Stack,
-  TextField, Alert, Button, CircularProgress,
+  Box, Typography, Stack, TextField, Alert,
+  Button, CircularProgress,
 } from "@mui/material";
-import { Zap, ArrowRight, Shield, ArrowLeft } from "lucide-react";
+import { Zap, ArrowRight, ArrowLeft, Shield } from "lucide-react";
 import { api } from "../services/api";
 
-// ─── Validation ────────────────────────────────────────────────────────────
-
+// ─── Validation ───────────────────────────────────────────────────────────────
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function getPasswordError(pw) {
-  if (!pw) return "Password is required";
-  if (pw.length < 8) return "Use at least 8 characters";
+  if (!pw)              return "Password is required";
+  if (pw.length < 8)   return "Use at least 8 characters";
   if (!/[A-Z]/.test(pw)) return "Include at least one uppercase letter";
   if (!/[a-z]/.test(pw)) return "Include at least one lowercase letter";
   if (!/[0-9]/.test(pw)) return "Include at least one number";
-  if (!/[^A-Za-z0-9]/.test(pw)) return "Include at least one special character (e.g. !@#$%)";
+  if (!/[^A-Za-z0-9]/.test(pw)) return "Include a special character (e.g. !@#$)";
   return "";
 }
 
-function validate(tab, email, password, name) {
+function validate(isRegister, email, password, name) {
   const e = {};
-  if (tab === 1 && !name.trim()) e.name = "Name is required";
-  if (!email.trim()) {
-    e.email = "Email is required";
-  } else if (!emailRegex.test(email)) {
-    e.email = "Enter a valid email address";
-  }
-  const pwErr = tab === 1 ? getPasswordError(password) : (!password ? "Password is required" : "");
+  if (isRegister && !name.trim()) e.name = "Name is required";
+  if (!email.trim())              e.email = "Email is required";
+  else if (!emailRegex.test(email)) e.email = "Enter a valid email";
+  const pwErr = isRegister ? getPasswordError(password) : (!password ? "Password is required" : "");
   if (pwErr) e.password = pwErr;
   return e;
 }
 
-// ─── Static particles (computed once) ─────────────────────────────────────
+// ─── Palette (same tokens as LandingPage) ────────────────────────────────────
+const C = {
+  bg:      "#080C10",
+  surface: "#0D1117",
+  border:  "#1C2128",
+  muted:   "#6B7280",
+  subtle:  "#374151",
+  body:    "#9CA3AF",
+  text:    "#E6EDF3",
+  accent:  "#38BDF8",
+};
 
-const AUTH_PARTICLES = Array.from({ length: 22 }, (_, i) => ({
-  id: i,
-  x: (i * 41.3 + 17) % 100,
-  y: (i * 61.7 + 9)  % 100,
-  size: 1 + (i % 3) * 0.5,
-  delay: (i * 0.35) % 4,
-  duration: 4 + (i % 4),
-}));
-
-// ─── AuthPage ──────────────────────────────────────────────────────────────
-
+// ─── AuthPage ─────────────────────────────────────────────────────────────────
 export default function AuthPage({ onAuth, onBack }) {
-  const [tab,         setTab]         = useState(0);
-  const [email,       setEmail]       = useState("");
-  const [password,    setPassword]    = useState("");
-  const [name,        setName]        = useState("");
-  const [loading,     setLoading]     = useState(false);
-  const [apiError,    setApiError]    = useState("");
-  const [fieldErrors, setFieldErrors] = useState({});
+  const [isRegister,   setIsRegister]   = useState(false);
+  const [email,        setEmail]        = useState("");
+  const [password,     setPassword]     = useState("");
+  const [name,         setName]         = useState("");
+  const [loading,      setLoading]      = useState(false);
+  const [apiError,     setApiError]     = useState("");
+  const [fieldErrors,  setFieldErrors]  = useState({});
 
-  // 3-D card tilt via direct DOM refs (no re-render on mouse move)
-  const cardRef = useRef(null);
-
-  const onCardMouseMove = useCallback((e) => {
-    const el = cardRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const x = (e.clientX - r.left) / r.width  - 0.5;
-    const y = (e.clientY - r.top)  / r.height - 0.5;
-    el.style.transform = `perspective(1000px) rotateY(${x * 10}deg) rotateX(${-y * 10}deg)`;
-    el.style.boxShadow =
-      `${-x * 14}px ${y * 14}px 50px rgba(0,0,0,0.5),
-       0 0 40px rgba(56,189,248,0.08)`;
-  }, []);
-
-  const onCardMouseLeave = useCallback(() => {
-    const el = cardRef.current;
-    if (!el) return;
-    el.style.transform = "perspective(1000px) rotateY(0deg) rotateX(0deg)";
-    el.style.boxShadow = "0 8px 40px rgba(0,0,0,0.35)";
-  }, []);
-
-  const handleTabChange = (_, v) => {
-    setTab(v);
+  const switchMode = (toRegister) => {
+    setIsRegister(toRegister);
     setApiError("");
     setFieldErrors({});
   };
 
+  const clearField = (field) =>
+    setFieldErrors((p) => ({ ...p, [field]: "" }));
+
   const submit = async () => {
     setApiError("");
-    const errors = validate(tab, email, password, name);
-    if (Object.keys(errors).length > 0) { setFieldErrors(errors); return; }
+    const errors = validate(isRegister, email, password, name);
+    if (Object.keys(errors).length) { setFieldErrors(errors); return; }
     setFieldErrors({});
     setLoading(true);
     try {
-      const data =
-        tab === 0
-          ? await api.login(email, password)
-          : await api.register(email, password, name);
+      const data = isRegister
+        ? await api.register(email, password, name)
+        : await api.login(email, password);
       onAuth(data.accessToken || data.token);
     } catch (err) {
       setApiError(err.message);
@@ -103,201 +79,199 @@ export default function AuthPage({ onAuth, onBack }) {
   };
 
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "#080C10",
-        position: "relative",
-        overflow: "hidden",
-        animation: "pageIn 0.45s ease both",
-      }}
-    >
-      {/* ── Background ─────────────────────────────────────── */}
+    <Box sx={{
+      minHeight: "100vh",
+      display: "flex",
+      background: C.bg,
+      position: "relative",
+      overflow: "hidden",
+      animation: "pageIn 0.4s ease both",
+    }}>
 
-      {/* Glow orbs */}
+      {/* ── Background ──────────────────────────────────────── */}
+      {/* Single faint glow */}
       <Box sx={{
-        position: "absolute", top: "20%", left: "50%",
-        transform: "translate(-50%,-50%)",
-        width: 600, height: 600,
-        background: "radial-gradient(circle, rgba(56,189,248,0.07) 0%, transparent 65%)",
-        borderRadius: "50%",
-        animation: "pulseSlow 5s ease-in-out infinite",
-        pointerEvents: "none",
-      }} />
-      <Box sx={{
-        position: "absolute", bottom: "10%", left: "15%",
-        width: 300, height: 300,
-        background: "radial-gradient(circle, rgba(59,130,246,0.06) 0%, transparent 65%)",
-        borderRadius: "50%",
-        animation: "pulseSlow 7s ease-in-out infinite 3s",
-        pointerEvents: "none",
-      }} />
-      <Box sx={{
-        position: "absolute", top: "30%", right: "10%",
-        width: 260, height: 260,
-        background: "radial-gradient(circle, rgba(124,58,237,0.06) 0%, transparent 65%)",
-        borderRadius: "50%",
-        animation: "pulseSlow 6s ease-in-out infinite 1.5s",
+        position: "absolute", top: "35%", left: "50%",
+        transform: "translate(-50%, -50%)",
+        width: 600, height: 500,
+        background: "radial-gradient(ellipse, rgba(56,189,248,0.055) 0%, transparent 65%)",
         pointerEvents: "none",
       }} />
 
-      {/* Grid */}
+      {/* Grid with fade mask */}
       <Box sx={{
         position: "absolute", inset: 0, pointerEvents: "none",
         backgroundImage: [
-          "linear-gradient(rgba(56,189,248,0.025) 1px, transparent 1px)",
-          "linear-gradient(90deg, rgba(56,189,248,0.025) 1px, transparent 1px)",
+          "linear-gradient(rgba(56,189,248,0.022) 1px, transparent 1px)",
+          "linear-gradient(90deg, rgba(56,189,248,0.022) 1px, transparent 1px)",
         ].join(","),
-        backgroundSize: "60px 60px",
+        backgroundSize: "72px 72px",
+        maskImage:
+          "radial-gradient(ellipse 60% 60% at 50% 40%, black 20%, transparent 100%)",
       }} />
 
-      {/* Particles */}
-      {AUTH_PARTICLES.map((p) => (
-        <Box
-          key={p.id}
-          sx={{
-            position: "absolute",
-            left: `${p.x}%`, top: `${p.y}%`,
-            width: p.size, height: p.size,
-            borderRadius: "50%",
-            background: "#38BDF8",
-            pointerEvents: "none",
-            animation: `twinkle ${p.duration}s ease-in-out infinite ${p.delay}s`,
-          }}
-        />
-      ))}
-
-      {/* ── Card wrapper ───────────────────────────────────── */}
-      <Box
-        sx={{
-          width: "100%",
-          maxWidth: 440,
-          px: 2,
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        {/* Back link */}
-        {onBack && (
-          <Button
-            startIcon={<ArrowLeft size={14} />}
-            onClick={onBack}
-            sx={{
-              color: "#E6EDF3", fontSize: "0.78rem", mb: 2,
-              fontFamily: "'IBM Plex Mono', monospace",
-              "&:hover": { color: "#E6EDF3", background: "transparent" },
-              pl: 0,
-            }}
-          >
-            Back to home
-          </Button>
-        )}
-
+      {/* ── Left panel (desktop only) ───────────────────────── */}
+      <Box sx={{
+        display: { xs: "none", lg: "flex" },
+        flexDirection: "column",
+        justifyContent: "space-between",
+        width: 420, flexShrink: 0,
+        borderRight: `1px solid ${C.border}`,
+        px: 6, py: 5,
+        position: "relative", zIndex: 1,
+      }}>
         {/* Logo */}
-        <Box sx={{ textAlign: "center", mb: 4 }}>
-          <Box
-            sx={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 1.5,
-              px: 2.5, py: 1,
-              background: "rgba(56,189,248,0.06)",
-              border: "1px solid rgba(56,189,248,0.22)",
-              borderRadius: "10px",
-              mb: 3,
-              boxShadow: "0 0 20px rgba(56,189,248,0.1)",
-            }}
-          >
-            <Zap size={16} color="#38BDF8" />
-            <Typography
-              sx={{
-                color: "#38BDF8",
-                letterSpacing: "0.12em",
-                fontSize: "0.85rem",
-                fontFamily: "'Syne', sans-serif",
-                fontWeight: 700,
-              }}
-            >
-              TrimIt
-            </Typography>
-          </Box>
-
-          <Typography
-            variant="h3"
-            sx={{ fontSize: "1.9rem", mb: 0.75, letterSpacing: "-0.01em" }}
-          >
-            {tab === 0 ? "Welcome back" : "Get started"}
-          </Typography>
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.82rem" }}
-          >
-            {tab === 0 ? "Sign in to your account" : "Create a free account"}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+          <Zap size={15} color={C.accent} />
+          <Typography sx={{ color: C.accent, fontFamily: "'Syne', sans-serif",
+            fontWeight: 700, letterSpacing: "0.1em", fontSize: "0.85rem" }}>
+            TrimIt
           </Typography>
         </Box>
 
-        {/* 3-D tilt card */}
-        <Box
-          ref={cardRef}
-          onMouseMove={onCardMouseMove}
-          onMouseLeave={onCardMouseLeave}
-          sx={{
-            background: "rgba(13,17,23,0.88)",
-            border: "1px solid #21262D",
-            borderRadius: "18px",
-            p: 3.5,
-            backdropFilter: "blur(28px)",
-            boxShadow: "0 8px 40px rgba(0,0,0,0.35)",
-            transition: "transform 0.14s ease, box-shadow 0.18s ease",
-            position: "relative",
-            overflow: "hidden",
-            /* top shimmer line */
-            "&::before": {
-              content: '""',
-              position: "absolute",
-              top: 0, left: 0, right: 0,
-              height: "1px",
-              background:
-                "linear-gradient(90deg, transparent, rgba(56,189,248,0.4), transparent)",
-            },
-          }}
-        >
-          {/* Tab switcher */}
-          <Tabs
-            value={tab}
-            onChange={handleTabChange}
-            sx={{
-              mb: 3,
-              "& .MuiTab-root": {
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: "0.78rem",
-                color: "#7D8590",
-                letterSpacing: "0.06em",
-              },
-              "& .Mui-selected":      { color: "#38BDF8 !important" },
-              "& .MuiTabs-indicator": { backgroundColor: "#38BDF8" },
-            }}
-          >
-            <Tab label="LOGIN"    />
-            <Tab label="REGISTER" />
-          </Tabs>
+        {/* Middle copy */}
+        <Box>
+          <Typography variant="h2" sx={{
+            fontSize: "2.2rem", fontWeight: 800,
+            color: C.text, lineHeight: 1.15,
+            letterSpacing: "-0.025em", mb: 2,
+          }}>
+            Short links.<br />
+            Real insights.
+          </Typography>
+          <Typography sx={{
+            fontFamily: "'IBM Plex Mono', monospace",
+            color: C.muted, fontSize: "0.82rem", lineHeight: 1.8,
+            mb: 4, maxWidth: 300,
+          }}>
+            Shorten, track, and protect your links — with analytics that
+            actually tell you something.
+          </Typography>
 
-          <Stack spacing={2}>
-            {tab === 1 && (
+          {/* Feature list */}
+          {[
+            "Real-time click analytics",
+            "Country & device breakdown",
+            "UTM parameter injection",
+            "Password-protected links",
+            "QR code generation",
+          ].map((f) => (
+            <Box key={f} sx={{ display: "flex", alignItems: "center",
+              gap: 1.5, mb: 1.5 }}>
+              <Box sx={{ width: 4, height: 4, borderRadius: "50%",
+                background: C.accent, flexShrink: 0 }} />
+              <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: "0.76rem", color: C.body }}>
+                {f}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+
+        {/* Footer */}
+        <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace",
+          fontSize: "0.65rem", color: C.subtle }}>
+          © 2026 TrimIt
+        </Typography>
+      </Box>
+
+      {/* ── Right panel — form ──────────────────────────────── */}
+      <Box sx={{
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        px: { xs: 2, sm: 4 },
+        py: 6,
+        position: "relative", zIndex: 1,
+      }}>
+
+        {/* Back link */}
+        {onBack && (
+          <Box sx={{ position: "absolute", top: 24, left: { xs: 16, lg: 32 } }}>
+            <Button startIcon={<ArrowLeft size={13} />} onClick={onBack}
+              sx={{ color: C.muted, fontSize: "0.76rem",
+                fontFamily: "'IBM Plex Mono', monospace", pl: 0,
+                "&:hover": { color: C.text, background: "transparent" } }}>
+              Back
+            </Button>
+          </Box>
+        )}
+
+        {/* Mobile logo */}
+        <Box sx={{ display: { xs: "flex", lg: "none" }, alignItems: "center",
+          gap: 1.5, mb: 6 }}>
+          <Zap size={15} color={C.accent} />
+          <Typography sx={{ color: C.accent, fontFamily: "'Syne', sans-serif",
+            fontWeight: 700, letterSpacing: "0.1em", fontSize: "0.85rem" }}>
+            TrimIt
+          </Typography>
+        </Box>
+
+        {/* Form card */}
+        <Box sx={{ width: "100%", maxWidth: 380 }}>
+
+          {/* Heading */}
+          <Box sx={{ mb: 5 }}>
+            <Typography variant="h3" sx={{
+              fontSize: "1.75rem", fontWeight: 700,
+              color: C.text, letterSpacing: "-0.02em", mb: 1,
+            }}>
+              {isRegister ? "Create account" : "Welcome back"}
+            </Typography>
+            <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: "0.8rem", color: C.muted }}>
+              {isRegister
+                ? "Start shortening links for free"
+                : "Sign in to your TrimIt account"}
+            </Typography>
+          </Box>
+
+          {/* Mode toggle — minimal segmented control */}
+          <Box sx={{
+            display: "flex", mb: 4,
+            background: C.surface,
+            border: `1px solid ${C.border}`,
+            borderRadius: "8px", p: "3px",
+          }}>
+            {[
+              { label: "Sign in",  value: false },
+              { label: "Register", value: true  },
+            ].map(({ label, value }) => (
+              <Box key={label} onClick={() => switchMode(value)} sx={{
+                flex: 1, textAlign: "center",
+                py: "7px", borderRadius: "6px", cursor: "pointer",
+                background: isRegister === value
+                  ? "rgba(56,189,248,0.1)" : "transparent",
+                border: isRegister === value
+                  ? `1px solid rgba(56,189,248,0.2)` : "1px solid transparent",
+                transition: "all 0.18s",
+              }}>
+                <Typography sx={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: "0.76rem", fontWeight: 600,
+                  color: isRegister === value ? C.accent : C.muted,
+                  letterSpacing: "0.04em",
+                  transition: "color 0.18s",
+                }}>
+                  {label}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+
+          {/* Fields */}
+          <Stack spacing={2.5}>
+            {isRegister && (
               <TextField
                 label="Name"
                 value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  if (fieldErrors.name) setFieldErrors((p) => ({ ...p, name: "" }));
-                }}
+                onChange={(e) => { setName(e.target.value); clearField("name"); }}
                 fullWidth size="small"
                 error={Boolean(fieldErrors.name)}
                 helperText={fieldErrors.name}
+                autoComplete="name"
               />
             )}
 
@@ -305,100 +279,86 @@ export default function AuthPage({ onAuth, onBack }) {
               label="Email"
               type="email"
               value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: "" }));
-              }}
+              onChange={(e) => { setEmail(e.target.value); clearField("email"); }}
               fullWidth size="small"
               error={Boolean(fieldErrors.email)}
               helperText={fieldErrors.email}
+              autoComplete="email"
             />
 
             <TextField
               label="Password"
               type="password"
               value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: "" }));
-              }}
-              fullWidth size="small"
+              onChange={(e) => { setPassword(e.target.value); clearField("password"); }}
               onKeyDown={(e) => e.key === "Enter" && submit()}
+              fullWidth size="small"
               error={Boolean(fieldErrors.password)}
               helperText={
                 fieldErrors.password ||
-                (tab === 1 ? "8+ chars · upper & lower · number · special" : "")
+                (isRegister ? "8+ chars · upper + lower · number · symbol" : "")
               }
+              autoComplete={isRegister ? "new-password" : "current-password"}
             />
 
             {apiError && (
-              <Alert
-                severity="error"
-                sx={{
-                  fontSize: "0.75rem",
-                  fontFamily: "'IBM Plex Mono', monospace",
-                  borderRadius: "10px",
-                }}
-              >
+              <Alert severity="error" sx={{
+                fontSize: "0.74rem", fontFamily: "'IBM Plex Mono', monospace",
+                borderRadius: "8px",
+                "& .MuiAlert-icon": { fontSize: "1rem" },
+              }}>
                 {apiError}
               </Alert>
             )}
 
             <Button
               variant="contained"
-              fullWidth
-              size="large"
+              fullWidth size="large"
               onClick={submit}
               disabled={loading}
               endIcon={
                 loading
-                  ? <CircularProgress size={15} sx={{ color: "#080C10" }} />
-                  : <ArrowRight size={15} />
+                  ? <CircularProgress size={14} sx={{ color: "#080C10" }} />
+                  : <ArrowRight size={14} />
               }
               sx={{
-                mt: 1, py: 1.5,
-                borderRadius: "10px",
-                fontWeight: 700,
-                letterSpacing: "0.03em",
-                background: "linear-gradient(135deg,#38BDF8,#0f41a7)",
-                color: "#080C10",
-                boxShadow: "0 0 24px rgba(56,189,248,0.25)",
-                "&:hover": {
-                  background: "linear-gradient(135deg,#38BDF8,#0f41a7)",
-                  boxShadow: "0 0 40px rgba(56,189,248,0.45)",
-                  transform: "translateY(-1px)",
-                },
-                "&:disabled": {
-                  background: "rgba(56,189,248,0.2)",
-                  color: "rgba(8,12,16,0.5)",
-                },
-                transition: "all 0.2s ease",
+                mt: 0.5, py: 1.5,
+                borderRadius: "8px", fontWeight: 700,
+                background: C.accent, color: "#080C10",
+                fontSize: "0.88rem",
+                "&:hover": { background: "#7DD3FC", transform: "translateY(-1px)" },
+                "&.Mui-disabled": { background: C.border, color: C.muted },
+                transition: "all 0.18s ease",
               }}
             >
-              {tab === 0 ? "Sign In" : "Create Account"}
+              {isRegister ? "Create account" : "Sign in"}
             </Button>
           </Stack>
-        </Box>
 
-        {/* Footer note */}
-        <Box
-          sx={{
-            textAlign: "center",
-            mt: 3,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 1,
-          }}
-        >
-          <Shield size={11} color="#7D8590" />
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ fontFamily: "'IBM Plex Mono', monospace" }}
-          >
-            JWT secured · Data encrypted
-          </Typography>
+          {/* Switch mode link */}
+          <Box sx={{ mt: 4, display: "flex", alignItems: "center",
+            justifyContent: "center", gap: 1 }}>
+            <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: "0.75rem", color: C.muted }}>
+              {isRegister ? "Already have an account?" : "Don't have an account?"}
+            </Typography>
+            <Button size="small" onClick={() => switchMode(!isRegister)}
+              sx={{ color: C.accent, fontSize: "0.75rem", px: 0.5,
+                fontFamily: "'IBM Plex Mono', monospace", minWidth: 0,
+                "&:hover": { background: "transparent", color: "#7DD3FC" } }}>
+              {isRegister ? "Sign in" : "Register"}
+            </Button>
+          </Box>
+
+          {/* Trust note */}
+          <Box sx={{ mt: 3, display: "flex", alignItems: "center",
+            justifyContent: "center", gap: 1 }}>
+            <Shield size={11} color={C.subtle} />
+            <Typography sx={{ fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: "0.65rem", color: C.subtle }}>
+              JWT secured · BCrypt encrypted
+            </Typography>
+          </Box>
         </Box>
       </Box>
     </Box>
