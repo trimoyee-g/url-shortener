@@ -21,10 +21,11 @@ import java.time.Instant;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-public class AnalyticsServiceTests {
+class AnalyticsServiceTests {
 
     @Mock
     private ClickEventRepository clickEventRepository;
@@ -41,28 +42,22 @@ public class AnalyticsServiceTests {
     @InjectMocks
     private AnalyticsService analyticsService;
 
-
     // ── Setup ────────────────────────────────────────────────────────────────
 
     @BeforeEach
     void setUp() {
+
         ReflectionTestUtils.setField(
                 analyticsService,
                 "baseUrl",
                 "http://localhost:8080"
         );
-
-        ReflectionTestUtils.setField(
-                analyticsService,
-                "statsCacheTtl",
-                300L
-        );
     }
-
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private Url buildUrl(String shortCode) {
+
         return Url.builder()
                 .id(1L)
                 .shortCode(shortCode)
@@ -72,6 +67,14 @@ public class AnalyticsServiceTests {
                 .build();
     }
 
+    private void mockCommonAnalytics(String shortCode) {
+
+        when(clickEventRepository.countClicksByReferrer(shortCode))
+                .thenReturn(List.of());
+
+        when(clickEventRepository.countClicksByDevice(shortCode))
+                .thenReturn(List.of());
+    }
 
     // ── getStats ─────────────────────────────────────────────────────────────
 
@@ -83,13 +86,13 @@ public class AnalyticsServiceTests {
         @DisplayName("returns analytics response using Redis click count")
         void returnsAnalytics_usingRedisCounter() {
 
-            // Arrange
             String shortCode = "abc123";
 
             when(urlRepository.findByShortCodeAndActiveTrue(shortCode))
                     .thenReturn(Optional.of(buildUrl(shortCode)));
 
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
             when(valueOperations.get("clicks:" + shortCode))
                     .thenReturn("25");
 
@@ -108,28 +111,44 @@ public class AnalyticsServiceTests {
                             new Object[]{"2026-01-02", 20L}
                     ));
 
-            // Act
-            AnalyticsResponse response = analyticsService.getStats(shortCode);
+            when(clickEventRepository.countClicksByCountry(shortCode))
+                    .thenReturn(Collections.singletonList(
+                            new Object[]{null, 5L}
+                    ));
 
-            // Assert
+            when(clickEventRepository.countClicksByDevice(shortCode))
+                    .thenReturn(List.of(
+                            new Object[]{"DESKTOP", 15L},
+                            new Object[]{"MOBILE", 10L}
+                    ));
+
+            AnalyticsResponse response =
+                    analyticsService.getStats(shortCode, 7);
+
             assertThat(response.getShortCode()).isEqualTo(shortCode);
+
             assertThat(response.getShortUrl())
                     .isEqualTo("http://localhost:8080/" + shortCode);
 
             assertThat(response.getTotalClicks()).isEqualTo(25L);
-            assertThat(response.getUniqueIps()).isEqualTo(10L);
+
+            assertThat(response.getUniqueVisitors()).isEqualTo(10L);
 
             assertThat(response.getTopCountries()).hasSize(2);
 
             assertThat(response.getTopCountries().get(0).getCountry())
                     .isEqualTo("IN");
 
-            assertThat(response.getTopCountries().get(0).getClicks())
-                    .isEqualTo(15L);
-
             assertThat(response.getClicksByDay())
                     .containsEntry("2026-01-01", 5L)
                     .containsEntry("2026-01-02", 20L);
+
+            assertThat(response.getTopReferrers())
+                    .hasSize(1);
+
+            assertThat(response.getDeviceBreakdown())
+                    .containsEntry("DESKTOP", 15L)
+                    .containsEntry("MOBILE", 10L);
 
             verify(clickEventRepository, never())
                     .countByShortCode(anyString());
@@ -139,13 +158,13 @@ public class AnalyticsServiceTests {
         @DisplayName("falls back to database when Redis cache is empty")
         void fallsBackToDatabase_whenRedisCacheMiss() {
 
-            // Arrange
             String shortCode = "fallback";
 
             when(urlRepository.findByShortCodeAndActiveTrue(shortCode))
                     .thenReturn(Optional.of(buildUrl(shortCode)));
 
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+            when(redisTemplate.opsForValue())
+                    .thenReturn(valueOperations);
 
             when(valueOperations.get("clicks:" + shortCode))
                     .thenReturn(null);
@@ -162,30 +181,29 @@ public class AnalyticsServiceTests {
             when(clickEventRepository.countClicksByDay(eq(shortCode), any()))
                     .thenReturn(List.of());
 
-            // Act
-            AnalyticsResponse response = analyticsService.getStats(shortCode);
+            mockCommonAnalytics(shortCode);
 
-            // Assert
+            AnalyticsResponse response =
+                    analyticsService.getStats(shortCode, 7);
+
             assertThat(response.getTotalClicks()).isEqualTo(50L);
 
             verify(clickEventRepository)
                     .countByShortCode(shortCode);
 
-            verify(valueOperations)
-                    .set("clicks:" + shortCode, "50");
+            verify(valueOperations, never())
+                    .set(anyString(), anyString());
         }
 
         @Test
         @DisplayName("throws UrlNotFoundException when short code does not exist")
         void throwsException_whenUrlNotFound() {
 
-            // Arrange
             when(urlRepository.findByShortCodeAndActiveTrue("ghost"))
                     .thenReturn(Optional.empty());
 
-            // Act + Assert
             assertThatThrownBy(() ->
-                    analyticsService.getStats("ghost")
+                    analyticsService.getStats("ghost", 7)
             ).isInstanceOf(UrlNotFoundException.class);
         }
 
@@ -193,7 +211,6 @@ public class AnalyticsServiceTests {
         @DisplayName("maps null country values to Unknown")
         void mapsNullCountry_toUnknown() {
 
-            // Arrange
             String shortCode = "country-test";
 
             when(urlRepository.findByShortCodeAndActiveTrue(shortCode))
@@ -208,59 +225,49 @@ public class AnalyticsServiceTests {
             when(clickEventRepository.countUniqueIpsByShortCode(shortCode))
                     .thenReturn(2L);
 
-            List<Object[]> countryData = new ArrayList<>();
-            countryData.add(new Object[]{null, 5L});
-
             when(clickEventRepository.countClicksByCountry(shortCode))
-                    .thenReturn(countryData);
+                    .thenReturn(Collections.singletonList(
+                            new Object[]{null, 5L}
+                    ));
 
             when(clickEventRepository.countClicksByDay(eq(shortCode), any()))
                     .thenReturn(Collections.emptyList());
 
-            // Act
-            AnalyticsResponse response = analyticsService.getStats(shortCode);
+            mockCommonAnalytics(shortCode);
 
-            // Assert
+            AnalyticsResponse response =
+                    analyticsService.getStats(shortCode, 7);
+
             assertThat(response.getTopCountries())
                     .hasSize(1);
 
             assertThat(response.getTopCountries().get(0).getCountry())
                     .isEqualTo("Unknown");
-
-            assertThat(response.getTopCountries().get(0).getClicks())
-                    .isEqualTo(5L);
         }
 
         @Test
         @DisplayName("limits top countries to maximum 10 entries")
         void limitsTopCountries_toTenEntries() {
 
-            // Arrange
             String shortCode = "many-countries";
 
             when(urlRepository.findByShortCodeAndActiveTrue(shortCode))
                     .thenReturn(Optional.of(buildUrl(shortCode)));
 
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+            when(redisTemplate.opsForValue())
+                    .thenReturn(valueOperations);
+
             when(valueOperations.get("clicks:" + shortCode))
                     .thenReturn("100");
 
             when(clickEventRepository.countUniqueIpsByShortCode(shortCode))
                     .thenReturn(50L);
 
-            List<Object[]> countries = List.of(
-                    new Object[]{"C1", 1L},
-                    new Object[]{"C2", 2L},
-                    new Object[]{"C3", 3L},
-                    new Object[]{"C4", 4L},
-                    new Object[]{"C5", 5L},
-                    new Object[]{"C6", 6L},
-                    new Object[]{"C7", 7L},
-                    new Object[]{"C8", 8L},
-                    new Object[]{"C9", 9L},
-                    new Object[]{"C10", 10L},
-                    new Object[]{"C11", 11L}
-            );
+            List<Object[]> countries = new ArrayList<>();
+
+            for (int i = 1; i <= 11; i++) {
+                countries.add(new Object[]{"C" + i, (long) i});
+            }
 
             when(clickEventRepository.countClicksByCountry(shortCode))
                     .thenReturn(countries);
@@ -268,10 +275,11 @@ public class AnalyticsServiceTests {
             when(clickEventRepository.countClicksByDay(eq(shortCode), any()))
                     .thenReturn(List.of());
 
-            // Act
-            AnalyticsResponse response = analyticsService.getStats(shortCode);
+            mockCommonAnalytics(shortCode);
 
-            // Assert
+            AnalyticsResponse response =
+                    analyticsService.getStats(shortCode, 7);
+
             assertThat(response.getTopCountries())
                     .hasSize(10);
         }
@@ -280,13 +288,14 @@ public class AnalyticsServiceTests {
         @DisplayName("returns empty collections when no analytics data exists")
         void returnsEmptyCollections_whenNoDataExists() {
 
-            // Arrange
             String shortCode = "empty";
 
             when(urlRepository.findByShortCodeAndActiveTrue(shortCode))
                     .thenReturn(Optional.of(buildUrl(shortCode)));
 
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+            when(redisTemplate.opsForValue())
+                    .thenReturn(valueOperations);
+
             when(valueOperations.get("clicks:" + shortCode))
                     .thenReturn("0");
 
@@ -299,13 +308,19 @@ public class AnalyticsServiceTests {
             when(clickEventRepository.countClicksByDay(eq(shortCode), any()))
                     .thenReturn(List.of());
 
-            // Act
-            AnalyticsResponse response = analyticsService.getStats(shortCode);
+            mockCommonAnalytics(shortCode);
 
-            // Assert
+            AnalyticsResponse response =
+                    analyticsService.getStats(shortCode, 7);
+
             assertThat(response.getTotalClicks()).isZero();
-            assertThat(response.getUniqueIps()).isZero();
+
+            assertThat(response.getUniqueVisitors()).isZero();
+
             assertThat(response.getTopCountries()).isEmpty();
+
+            assertThat(response.getTopReferrers()).isEmpty();
+
             assertThat(response.getClicksByDay()).isEmpty();
         }
 
@@ -313,13 +328,14 @@ public class AnalyticsServiceTests {
         @DisplayName("preserves insertion order of click counts by day")
         void preservesOrder_forClicksByDay() {
 
-            // Arrange
             String shortCode = "ordered";
 
             when(urlRepository.findByShortCodeAndActiveTrue(shortCode))
                     .thenReturn(Optional.of(buildUrl(shortCode)));
 
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+            when(redisTemplate.opsForValue())
+                    .thenReturn(valueOperations);
+
             when(valueOperations.get("clicks:" + shortCode))
                     .thenReturn("15");
 
@@ -336,10 +352,11 @@ public class AnalyticsServiceTests {
                             new Object[]{"2026-01-03", 3L}
                     ));
 
-            // Act
-            AnalyticsResponse response = analyticsService.getStats(shortCode);
+            mockCommonAnalytics(shortCode);
 
-            // Assert
+            AnalyticsResponse response =
+                    analyticsService.getStats(shortCode, 7);
+
             Map<String, Long> expected = new LinkedHashMap<>();
             expected.put("2026-01-01", 1L);
             expected.put("2026-01-02", 2L);

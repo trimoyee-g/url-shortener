@@ -29,7 +29,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("AnalyticsController")
 class AnalyticsControllerTests {
 
-    private static final String STATS_URL = "/api/v1/urls/{shortCode}/stats";
+    private static final String STATS_URL =
+            "/api/v1/urls/{shortCode}/stats?days=7";
 
     @Autowired
     private MockMvc mockMvc;
@@ -54,29 +55,49 @@ class AnalyticsControllerTests {
     // -------------------------------------------------------------------------
 
     private AnalyticsResponse buildFullResponse() {
-        AnalyticsResponse.CountryCount india = AnalyticsResponse.CountryCount.builder()
-                .country("India")
-                .clicks(15)
-                .build();
 
-        AnalyticsResponse.CountryCount usa = AnalyticsResponse.CountryCount.builder()
-                .country("USA")
-                .clicks(10)
-                .build();
+        AnalyticsResponse.CountryCount india =
+                AnalyticsResponse.CountryCount.builder()
+                        .country("India")
+                        .clicks(15)
+                        .build();
 
-        // LinkedHashMap preserves insertion order → deterministic JSON assertions
+        AnalyticsResponse.CountryCount usa =
+                AnalyticsResponse.CountryCount.builder()
+                        .country("USA")
+                        .clicks(10)
+                        .build();
+
+        AnalyticsResponse.ReferrerCount google =
+                AnalyticsResponse.ReferrerCount.builder()
+                        .referrer("google.com")
+                        .clicks(18)
+                        .build();
+
+        AnalyticsResponse.ReferrerCount linkedin =
+                AnalyticsResponse.ReferrerCount.builder()
+                        .referrer("linkedin.com")
+                        .clicks(7)
+                        .build();
+
         Map<String, Long> clicksByDay = new LinkedHashMap<>();
         clicksByDay.put("2026-05-08", 5L);
         clicksByDay.put("2026-05-09", 8L);
         clicksByDay.put("2026-05-10", 12L);
 
+        Map<String, Long> deviceBreakdown = new LinkedHashMap<>();
+        deviceBreakdown.put("DESKTOP", 10L);
+        deviceBreakdown.put("MOBILE", 12L);
+        deviceBreakdown.put("TABLET", 3L);
+
         return AnalyticsResponse.builder()
                 .shortCode("abc123")
                 .shortUrl("http://localhost:8080/abc123")
-                .longUrl("https://google.com")
                 .totalClicks(25)
-                .uniqueIps(12)
+                .uniqueVisitors(12)
                 .topCountries(List.of(india, usa))
+                .topReferrers(List.of(google, linkedin))
+                .deviceBreakdown(deviceBreakdown)
                 .clicksByDay(clicksByDay)
                 .build();
     }
@@ -93,103 +114,148 @@ class AnalyticsControllerTests {
         @DisplayName("200 OK — returns full analytics payload for a known short code")
         void returnsFullAnalyticsPayload() throws Exception {
 
-            when(analyticsService.getStats("abc123")).thenReturn(buildFullResponse());
+            when(analyticsService.getStats("abc123", 7))
+                    .thenReturn(buildFullResponse());
 
-            mockMvc.perform(get(STATS_URL, "abc123"))
+            mockMvc.perform(get("/api/v1/urls/{shortCode}/stats", "abc123")
+                            .param("days", "7"))
                     .andExpect(status().isOk())
+
                     // top-level fields
                     .andExpect(jsonPath("$.shortCode").value("abc123"))
-                    .andExpect(jsonPath("$.shortUrl").value("http://localhost:8080/abc123"))
-                    .andExpect(jsonPath("$.longUrl").value("https://google.com"))
+                    .andExpect(jsonPath("$.shortUrl")
+                            .value("http://localhost:8080/abc123"))
                     .andExpect(jsonPath("$.totalClicks").value(25))
-                    .andExpect(jsonPath("$.uniqueIps").value(12))
-                    // topCountries array
-                    .andExpect(jsonPath("$.topCountries[0].country").value("India"))
-                    .andExpect(jsonPath("$.topCountries[0].clicks").value(15))
-                    .andExpect(jsonPath("$.topCountries[1].country").value("USA"))
-                    .andExpect(jsonPath("$.topCountries[1].clicks").value(10))
-                    // clicksByDay map
-                    .andExpect(jsonPath("$.clicksByDay['2026-05-08']").value(5))
-                    .andExpect(jsonPath("$.clicksByDay['2026-05-09']").value(8))
-                    .andExpect(jsonPath("$.clicksByDay['2026-05-10']").value(12));
+                    .andExpect(jsonPath("$.uniqueVisitors").value(12))
 
-            verify(analyticsService, times(1)).getStats("abc123");
+                    // topCountries
+                    .andExpect(jsonPath("$.topCountries[0].country")
+                            .value("India"))
+                    .andExpect(jsonPath("$.topCountries[0].clicks")
+                            .value(15))
+
+                    .andExpect(jsonPath("$.topCountries[1].country")
+                            .value("USA"))
+                    .andExpect(jsonPath("$.topCountries[1].clicks")
+                            .value(10))
+
+                    // topReferrers
+                    .andExpect(jsonPath("$.topReferrers[0].referrer")
+                            .value("google.com"))
+                    .andExpect(jsonPath("$.topReferrers[0].clicks")
+                            .value(18))
+
+                    // deviceBreakdown
+                    .andExpect(jsonPath("$.deviceBreakdown.DESKTOP")
+                            .value(10))
+                    .andExpect(jsonPath("$.deviceBreakdown.MOBILE")
+                            .value(12))
+                    .andExpect(jsonPath("$.deviceBreakdown.TABLET")
+                            .value(3))
+
+                    // clicksByDay
+                    .andExpect(jsonPath("$.clicksByDay['2026-05-08']")
+                            .value(5))
+                    .andExpect(jsonPath("$.clicksByDay['2026-05-09']")
+                            .value(8))
+                    .andExpect(jsonPath("$.clicksByDay['2026-05-10']")
+                            .value(12));
+
+            verify(analyticsService, times(1))
+                    .getStats("abc123", 7);
         }
 
         @Test
         @DisplayName("404 Not Found — unknown short code returns 404")
         void returnsNotFoundForUnknownShortCode() throws Exception {
 
-            when(analyticsService.getStats("unknown"))
-                    .thenThrow(new UrlNotFoundException("Short code 'unknown' not found"));
+            when(analyticsService.getStats("unknown", 7))
+                    .thenThrow(new UrlNotFoundException("unknown"));
 
-            mockMvc.perform(get(STATS_URL, "unknown"))
+            mockMvc.perform(get("/api/v1/urls/{shortCode}/stats", "unknown")
+                            .param("days", "7"))
                     .andExpect(status().isNotFound());
 
-            verify(analyticsService, times(1)).getStats("unknown");
+            verify(analyticsService, times(1))
+                    .getStats("unknown", 7);
         }
 
         @Test
         @DisplayName("500 Internal Server Error — unexpected service exception is handled")
         void returnsInternalServerErrorOnUnexpectedException() throws Exception {
 
-            when(analyticsService.getStats("abc123"))
+            when(analyticsService.getStats("abc123", 7))
                     .thenThrow(new RuntimeException("DB connection lost"));
 
-            mockMvc.perform(get(STATS_URL, "abc123"))
+            mockMvc.perform(get("/api/v1/urls/{shortCode}/stats", "abc123")
+                            .param("days", "7"))
                     .andExpect(status().isInternalServerError());
 
-            verify(analyticsService, times(1)).getStats("abc123");
+            verify(analyticsService, times(1))
+                    .getStats("abc123", 7);
         }
 
         @Test
         @DisplayName("200 OK — response with zero clicks is serialized correctly")
         void handlesZeroClicksGracefully() throws Exception {
 
+            Map<String, Long> devices = new LinkedHashMap<>();
+            devices.put("DESKTOP", 0L);
+            devices.put("MOBILE", 0L);
+            devices.put("TABLET", 0L);
+
             AnalyticsResponse emptyStats = AnalyticsResponse.builder()
                     .shortCode("newurl")
                     .shortUrl("http://localhost:8080/newurl")
-                    .longUrl("https://example.com")
                     .totalClicks(0)
-                    .uniqueIps(0)
+                    .uniqueVisitors(0)
                     .topCountries(List.of())
+                    .topReferrers(List.of())
+                    .deviceBreakdown(devices)
                     .clicksByDay(new LinkedHashMap<>())
                     .build();
 
-            when(analyticsService.getStats("newurl")).thenReturn(emptyStats);
+            when(analyticsService.getStats("newurl", 7))
+                    .thenReturn(emptyStats);
 
-            mockMvc.perform(get(STATS_URL, "newurl"))
+            mockMvc.perform(get("/api/v1/urls/{shortCode}/stats", "newurl")
+                            .param("days", "7"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalClicks").value(0))
-                    .andExpect(jsonPath("$.uniqueIps").value(0))
+                    .andExpect(jsonPath("$.uniqueVisitors").value(0))
                     .andExpect(jsonPath("$.topCountries").isEmpty())
+                    .andExpect(jsonPath("$.topReferrers").isEmpty())
                     .andExpect(jsonPath("$.clicksByDay").isEmpty());
 
-            verify(analyticsService, times(1)).getStats("newurl");
+            verify(analyticsService, times(1))
+                    .getStats("newurl", 7);
         }
 
         @Test
         @DisplayName("delegates to AnalyticsService with the exact short code from the path")
         void delegatesToServiceWithCorrectShortCode() throws Exception {
 
-            when(analyticsService.getStats("xyz789")).thenReturn(
-                    AnalyticsResponse.builder()
-                            .shortCode("xyz789")
-                            .shortUrl("http://localhost:8080/xyz789")
-                            .longUrl("https://example.org")
-                            .totalClicks(1)
-                            .uniqueIps(1)
-                            .topCountries(List.of())
-                            .clicksByDay(new LinkedHashMap<>())
-                            .build()
-            );
+            AnalyticsResponse response = AnalyticsResponse.builder()
+                    .shortCode("xyz789")
+                    .shortUrl("http://localhost:8080/xyz789")
+                    .totalClicks(1)
+                    .uniqueVisitors(1)
+                    .topCountries(List.of())
+                    .topReferrers(List.of())
+                    .deviceBreakdown(new LinkedHashMap<>())
+                    .clicksByDay(new LinkedHashMap<>())
+                    .build();
 
-            mockMvc.perform(get(STATS_URL, "xyz789"))
+            when(analyticsService.getStats("xyz789", 7))
+                    .thenReturn(response);
+
+            mockMvc.perform(get("/api/v1/urls/{shortCode}/stats", "xyz789")
+                            .param("days", "7"))
                     .andExpect(status().isOk());
 
-            // Strict delegation check — wrong short code must never reach the service
-            verify(analyticsService).getStats("xyz789");
-            verify(analyticsService, never()).getStats("abc123");
+            verify(analyticsService).getStats("xyz789", 7);
+            verify(analyticsService, never())
+                    .getStats("abc123", 7);
         }
     }
 }
