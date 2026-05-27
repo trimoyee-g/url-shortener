@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  # ── Backend Tests ────────────────────────────────────────────────────────────
+  # Testcontainers spins up MySQL, Redis, and RabbitMQ as real Docker containers
+  # inside the runner — no external services needed.
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run tests
+        run: mvn test -B
+        env:
+          # Required by Spring Security config — use a dummy value for CI
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+
+  # ── Frontend Lint + Build ────────────────────────────────────────────────────
+  test-frontend:
+    name: Frontend Lint & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: url-shortener-ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: url-shortener-ui
+
+      - name: Lint
+        run: npm run lint
+        working-directory: url-shortener-ui
+
+      - name: Build
+        run: npm run build
+        working-directory: url-shortener-ui
+
+  # ── Docker Build + Push ──────────────────────────────────────────────────────
+  # Only runs on push to main (not PRs), and only if both test jobs pass.
+  docker:
+    name: Docker Build & Push
+    needs: [test-backend, test-frontend]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            trimoyeeg/url-shortener:latest
+            trimoyeeg/url-shortener:${{ github.sha }}
+          # GitHub Actions cache keeps layer rebuilds fast
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
