@@ -57,6 +57,20 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(401, "Unauthorized", ex.getMessage(), Instant.now()));
     }
 
+    /**
+     * Returns 401 with a machine-readable {@code requiresPassword: true} flag.
+     * The frontend intercepts this to show the password dialog instead of following the redirect.
+     */
+    @ExceptionHandler(PasswordRequiredException.class)
+    public ResponseEntity<Map<String, Object>> handlePasswordRequired(PasswordRequiredException ex) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", 401);
+        body.put("requiresPassword", true);
+        body.put("shortCode", ex.getShortCode());
+        body.put("timestamp", Instant.now());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegal(IllegalArgumentException ex) {
         return ResponseEntity.badRequest()

@@ -19,16 +19,35 @@ public class ShortenRequest {
     @URL(message = "Must be a valid URL")
     private String longUrl;
 
-    @Size(min = 3, max = 20, message = "Alias must be 3-20 characters") // 20 is usually safer for UI
+    @Size(min = 3, max = 20, message = "Alias must be 3-20 characters")
     @Pattern(regexp = "^[a-zA-Z0-9_-]*$",
             message = "Alias may only contain letters, digits, hyphens, and underscores")
     private String customAlias;
 
     private Long ttlSeconds;
 
+    // ── UTM tracking parameters (all optional) ────────────────────────────────
+
+    @Size(max = 100, message = "utm_source must be at most 100 characters")
+    private String utmSource;
+
+    @Size(max = 100, message = "utm_medium must be at most 100 characters")
+    private String utmMedium;
+
+    @Size(max = 100, message = "utm_campaign must be at most 100 characters")
+    private String utmCampaign;
+
+    // ── Password protection (optional) ────────────────────────────────────────
+
+    /** When set, visitors must supply this password before being redirected. */
+    @Size(max = 72, message = "Password must be at most 72 characters")
+    private String password;
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
     /**
-     * Normalizes the URL by removing trailing slashes and converting to lowercase host.
-     * This ensures the Snowflake ID generation is idempotent for the same actual destination.
+     * Normalizes the URL by removing trailing slashes.
+     * This ensures idempotent short-code generation for the same destination.
      */
     public String getNormalizedUrl() {
         if (longUrl == null) return null;

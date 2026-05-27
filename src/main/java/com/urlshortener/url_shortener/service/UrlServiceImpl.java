@@ -1,17 +1,24 @@
 package com.urlshortener.url_shortener.service;
 
 import com.urlshortener.url_shortener.dto.ShortenRequest;
+import com.urlshortener.url_shortener.dto.UnlockRequest;
+import com.urlshortener.url_shortener.dto.UnlockResponse;
 import com.urlshortener.url_shortener.dto.UrlResponse;
 import com.urlshortener.url_shortener.entity.Url;
 import com.urlshortener.url_shortener.entity.User;
 import com.urlshortener.url_shortener.exception.AlreadyExistsException;
 import com.urlshortener.url_shortener.exception.ForbiddenException;
+import com.urlshortener.url_shortener.exception.PasswordRequiredException;
 import com.urlshortener.url_shortener.exception.UrlNotFoundException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import com.urlshortener.url_shortener.repository.ClickEventRepository;
 import com.urlshortener.url_shortener.repository.UrlRepository;
 import com.urlshortener.url_shortener.repository.UserRepository;
 import com.urlshortener.url_shortener.util.Base62Encoder;
 import com.urlshortener.url_shortener.util.UrlCuckooFilter;
 import com.urlshortener.url_shortener.util.SnowflakeIdGenerator;
+import com.urlshortener.url_shortener.util.UtmUtils;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -27,6 +34,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.io.ByteArrayOutputStream;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.WriterException;
@@ -42,12 +52,20 @@ public class UrlServiceImpl implements UrlService {
 
     private final UrlRepository urlRepository;
     private final UserRepository userRepository;
+    private final ClickEventRepository clickEventRepository;
     private final RedisTemplate<String, String> redisTemplate;
     private final Base62Encoder base62Encoder;
     private final SnowflakeIdGenerator idGenerator;
     private final UrlCuckooFilter cuckooFilter;
     private final MeterRegistry meterRegistry;
     private final RateLimiterService rateLimiterService;
+
+    // BCrypt encoder — instantiated once; strength 12 is intentionally slow for password hashing.
+    private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder(12);
+
+    // Sentinel cached for password-protected links so resolve() can detect protection on a
+    // cache hit without a second Redis key or an extra DB round-trip.
+    private static final String PROTECTED_SENTINEL = "__PROTECTED__";
 
     // Metrics
     private Counter redirectSuccessCounter;
@@ -107,19 +125,34 @@ public class UrlServiceImpl implements UrlService {
 
         Instant expiresAt = computeExpiry(request.getTtlSeconds());
 
+        // Append any requested UTM parameters to the destination URL
+        String destinationUrl = UtmUtils.appendUtmParams(
+                normalizedUrl,
+                request.getUtmSource(),
+                request.getUtmMedium(),
+                request.getUtmCampaign());
+
+        // Hash the password if one was provided
+        String passwordHash = (request.getPassword() != null && !request.getPassword().isBlank())
+                ? PASSWORD_ENCODER.encode(request.getPassword())
+                : null;
+
         Url url = Url.builder()
                 .id(id)
                 .shortCode(shortCode)
-                .longUrl(normalizedUrl)
+                .longUrl(destinationUrl)
                 .customAlias(customAlias)
                 .user(user)
                 .expiresAt(expiresAt)
+                .passwordHash(passwordHash)
                 .active(true)
                 .createdAt(Instant.now())
                 .build();
 
         urlRepository.save(url);
-        cacheUrl(shortCode, normalizedUrl, expiresAt);
+        // Cache the sentinel for protected links so resolve() never exposes the destination URL.
+        // For open links, cache the UTM-enriched destination URL (not the bare normalizedUrl).
+        cacheUrl(shortCode, passwordHash != null ? PROTECTED_SENTINEL : destinationUrl, expiresAt);
         cuckooFilter.add(shortCode);
 
         log.info("Created short URL: {} -> {}", shortCode, url.getLongUrl());
@@ -143,8 +176,11 @@ public class UrlServiceImpl implements UrlService {
         String cached = redisTemplate.opsForValue().get(cacheKey(shortCode));
         if (cached != null) {
             cacheHitCounter.increment();
-            redirectSuccessCounter.increment();
             sample.stop(meterRegistry.timer("url.resolve.latency", "source", "cache"));
+            if (PROTECTED_SENTINEL.equals(cached)) {
+                throw new PasswordRequiredException(shortCode);
+            }
+            redirectSuccessCounter.increment();
             return cached;
         }
 
@@ -163,12 +199,18 @@ public class UrlServiceImpl implements UrlService {
             throw new UrlNotFoundException(shortCode);
         }
 
-        // Repopulate cache
-        cacheUrl(shortCode, url.getLongUrl(), url.getExpiresAt());
+        boolean isProtected = url.getPasswordHash() != null;
+        // Repopulate cache — store sentinel for protected links so future cache hits
+        // also route to the unlock page without exposing the destination URL.
+        cacheUrl(shortCode, isProtected ? PROTECTED_SENTINEL : url.getLongUrl(), url.getExpiresAt());
 
-        redirectSuccessCounter.increment();
         sample.stop(meterRegistry.timer("url.resolve.latency", "source", "db"));
 
+        if (isProtected) {
+            throw new PasswordRequiredException(shortCode);
+        }
+
+        redirectSuccessCounter.increment();
         return url.getLongUrl();
     }
 
@@ -199,8 +241,37 @@ public class UrlServiceImpl implements UrlService {
     public List<UrlResponse> getUserUrls(String userEmail) {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
-        return urlRepository.findByUserIdAndActiveTrueOrderByCreatedAtDesc(user.getId())
-                .stream().map(this::toResponse).toList();
+
+        Set<Url> urls = urlRepository.findByUserIdAndActiveTrueOrderByCreatedAtDesc(user.getId());
+        if (urls.isEmpty()) return List.of();
+
+        // Batch-load click counts in a single query to avoid N+1
+        List<String> codes = urls.stream().map(Url::getShortCode).toList();
+        Map<String, Long> clickCounts = batchClickCounts(codes);
+
+        return urls.stream()
+                .map(url -> toResponse(url, clickCounts.getOrDefault(url.getShortCode(), 0L)))
+                .toList();
+    }
+
+    /**
+     * Fetches click counts for a list of short codes in one DB round-trip,
+     * merging with Redis values where available (Redis wins — it's more current).
+     */
+    private Map<String, Long> batchClickCounts(List<String> codes) {
+        // Start from DB aggregates
+        Map<String, Long> counts = clickEventRepository.countClicksPerCode(codes).stream()
+                .collect(Collectors.toMap(
+                        row -> (String) row[0],
+                        row -> (Long) row[1]));
+
+        // Overwrite with Redis values where present
+        codes.forEach(code -> {
+            String cached = redisTemplate.opsForValue().get("clicks:" + code);
+            if (cached != null) counts.put(code, Long.parseLong(cached));
+        });
+
+        return counts;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -225,7 +296,13 @@ public class UrlServiceImpl implements UrlService {
         return "url:" + code;
     }
 
-    private UrlResponse toResponse(Url url) {
+    /** Used when click count is already known (e.g. batch-loaded in getUserUrls). */
+    private UrlResponse toResponse(Url url, long clickCount) {
+        UrlResponse.LinkStatus status = (url.getExpiresAt() != null
+                && url.getExpiresAt().isBefore(Instant.now()))
+                ? UrlResponse.LinkStatus.EXPIRED
+                : UrlResponse.LinkStatus.ACTIVE;
+
         return UrlResponse.builder()
                 .shortUrl(baseUrl + "/" + url.getShortCode())
                 .shortCode(url.getShortCode())
@@ -233,6 +310,42 @@ public class UrlServiceImpl implements UrlService {
                 .customAlias(url.getCustomAlias())
                 .expiresAt(url.getExpiresAt())
                 .createdAt(url.getCreatedAt())
+                .clickCount(clickCount)
+                .status(status)
+                .build();
+    }
+
+    /** Used for single-URL responses (shorten, QR) where we look up the click count individually. */
+    private UrlResponse toResponse(Url url) {
+        String cached = redisTemplate.opsForValue().get("clicks:" + url.getShortCode());
+        long clickCount = cached != null
+                ? Long.parseLong(cached)
+                : clickEventRepository.countByShortCode(url.getShortCode());
+        return toResponse(url, clickCount);
+    }
+
+    // ── Unlock (password-protected links) ────────────────────────────────────
+
+    @Override
+    public UnlockResponse unlock(String shortCode, UnlockRequest request) {
+        Url url = urlRepository.findByShortCodeAndActiveTrue(shortCode)
+                .orElseThrow(() -> new UrlNotFoundException(shortCode));
+
+        if (url.getPasswordHash() == null) {
+            // Link has no password — return the redirect URL directly
+            return UnlockResponse.builder()
+                    .shortCode(shortCode)
+                    .redirectUrl(url.getLongUrl())
+                    .build();
+        }
+
+        if (!PASSWORD_ENCODER.matches(request.getPassword(), url.getPasswordHash())) {
+            throw new BadCredentialsException("Incorrect password");
+        }
+
+        return UnlockResponse.builder()
+                .shortCode(shortCode)
+                .redirectUrl(url.getLongUrl())
                 .build();
     }
 

@@ -34,6 +34,13 @@ public class Url {
 
     private Instant expiresAt;
 
+    /**
+     * BCrypt hash of the link's access password.
+     * Null means the link is publicly accessible without a password.
+     */
+    @Column(length = 60)
+    private String passwordHash;
+
     @Column(nullable = false)
     @Builder.Default
     private boolean active = true;

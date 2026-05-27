@@ -7,6 +7,7 @@ import com.urlshortener.url_shortener.entity.User;
 import com.urlshortener.url_shortener.exception.AlreadyExistsException;
 import com.urlshortener.url_shortener.exception.ForbiddenException;
 import com.urlshortener.url_shortener.exception.UrlNotFoundException;
+import com.urlshortener.url_shortener.repository.ClickEventRepository;
 import com.urlshortener.url_shortener.repository.UrlRepository;
 import com.urlshortener.url_shortener.repository.UserRepository;
 import com.urlshortener.url_shortener.util.Base62Encoder;
@@ -28,9 +29,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -44,6 +45,9 @@ class UrlServiceImplTests {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private ClickEventRepository clickEventRepository;
 
     @Mock
     private RedisTemplate<String, String> redisTemplate;
@@ -75,6 +79,7 @@ class UrlServiceImplTests {
         urlService = new UrlServiceImpl(
                 urlRepository,
                 userRepository,
+                clickEventRepository,
                 redisTemplate,
                 base62Encoder,
                 idGenerator,
@@ -105,6 +110,9 @@ class UrlServiceImplTests {
 
         lenient().when(redisTemplate.opsForValue())
                 .thenReturn(valueOperations);
+
+        lenient().when(valueOperations.get(anyString()))
+                .thenReturn(null);
     }
 
     @Nested
@@ -131,6 +139,9 @@ class UrlServiceImplTests {
                     anyString(),
                     eq(user.getId())
             )).thenReturn(Optional.of(existing));
+
+            when(clickEventRepository.countByShortCode(anyString()))
+                    .thenReturn(0L);
 
             UrlResponse response =
                     urlService.shorten(request, email, ip);
@@ -164,6 +175,9 @@ class UrlServiceImplTests {
 
             when(base62Encoder.encode(123L))
                     .thenReturn("abc123");
+
+            when(clickEventRepository.countByShortCode(anyString()))
+                    .thenReturn(0L);
 
             UrlResponse response =
                     urlService.shorten(request, email, ip);
@@ -392,18 +406,29 @@ class UrlServiceImplTests {
             when(userRepository.findByEmail(user.getEmail()))
                     .thenReturn(Optional.of(user));
 
+            LinkedHashSet<Url> urls = new LinkedHashSet<>();
+            urls.add(buildUrl("a1"));
+            urls.add(buildUrl("a2"));
+
             when(urlRepository.findByUserIdAndActiveTrueOrderByCreatedAtDesc(
                     user.getId()
-            )).thenReturn(Set.of(
-                    buildUrl("a1"),
-                    buildUrl("a2")
-            ));
+            )).thenReturn(urls);
+
+            when(clickEventRepository.countClicksPerCode(anyList()))
+                    .thenReturn(List.of(
+                            new Object[]{"a1", 5L},
+                            new Object[]{"a2", 10L}
+                    ));
 
             List<UrlResponse> responses =
                     urlService.getUserUrls(user.getEmail());
 
             assertThat(responses)
                     .hasSize(2);
+
+            assertThat(responses)
+                    .extracting(UrlResponse::getShortCode)
+                    .containsExactlyInAnyOrder("a1", "a2");
         }
     }
 

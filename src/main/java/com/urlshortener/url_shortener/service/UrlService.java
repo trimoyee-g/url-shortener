@@ -1,7 +1,8 @@
 package com.urlshortener.url_shortener.service;
 
-
 import com.urlshortener.url_shortener.dto.ShortenRequest;
+import com.urlshortener.url_shortener.dto.UnlockRequest;
+import com.urlshortener.url_shortener.dto.UnlockResponse;
 import com.urlshortener.url_shortener.dto.UrlResponse;
 
 import java.util.List;
@@ -11,6 +12,12 @@ public interface UrlService {
     String resolve(String shortCode);
     void delete(String shortCode, String userEmail);
     List<UrlResponse> getUserUrls(String userEmail);
+
+    /**
+     * Verify a password for a password-protected short link and return the destination URL.
+     * Throws BadCredentialsException on a wrong password.
+     */
+    UnlockResponse unlock(String shortCode, UnlockRequest request);
 
     /**
      * Generate a PNG QR code for the given short code. Returns raw PNG bytes.
