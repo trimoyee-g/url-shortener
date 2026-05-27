@@ -1,8 +1,8 @@
-import React, { useRef, useCallback, useState } from "react";
+import { useRef, useCallback, useState } from "react";
 import { Box, Typography, Button, Container, InputBase, CircularProgress } from "@mui/material";
 import {
   Zap, ArrowRight, BarChart2, Shield, QrCode, ChevronRight,
-  Link as LinkIcon, Tag, Lock, Globe, Copy, Check, TrendingUp,
+  Link as LinkIcon, Tag, Lock, Copy, Check,
 } from "lucide-react";
 
 // ─── Palette ─────────────────────────────────────────────────────────────────

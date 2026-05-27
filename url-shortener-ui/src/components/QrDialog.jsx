@@ -1,16 +1,15 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Box, 
   IconButton, 
   Dialog, 
   DialogTitle, 
   DialogContent, 
-  DialogActions,
   Button,
   Typography, 
   CircularProgress
 } from "@mui/material";
-import { X, QrCode, Plus, Link, Calendar, Zap } from "lucide-react";
+import { X, QrCode } from "lucide-react";
 import { api } from "../services/api";
 
 
@@ -20,6 +19,7 @@ export default function QrDialog({ open, onClose, token, shortCode }) {
 
   useEffect(() => {
     if (!open || !shortCode) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     api
       .getQr(token, shortCode)

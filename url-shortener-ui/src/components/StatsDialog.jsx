@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Dialog, DialogTitle, DialogContent, Box, Typography, IconButton,
   Stack, Card, Skeleton, LinearProgress, Tooltip, Alert,
@@ -48,6 +48,22 @@ function MiniAreaChart({ data }) {
   );
 }
 
+function StatCard({ icon, label, value, color = "#38BDF8" }) {
+  return (
+    <Card sx={{ p: 2, flex: 1, minWidth: 0 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+        <Box sx={{ color }}>{icon}</Box>
+        <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.08em" }}>
+          {label}
+        </Typography>
+      </Box>
+      <Typography variant="h4" sx={{ color, fontFamily: "'Syne', sans-serif" }}>
+        {fmtNum(value)}
+      </Typography>
+    </Card>
+  );
+}
+
 export default function StatsDialog({ open, onClose, token, url }) {
   const [stats,   setStats]   = useState(null);
   const [loading, setLoading] = useState(false);
@@ -66,23 +82,12 @@ export default function StatsDialog({ open, onClose, token, url }) {
   }, [token, url, days]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!open) { setStats(null); setError(null); return; }
     fetchStats();
   }, [open, fetchStats]);
 
-  const StatCard = ({ icon, label, value, color = "#38BDF8" }) => (
-    <Card sx={{ p: 2, flex: 1, minWidth: 0 }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-        <Box sx={{ color }}>{icon}</Box>
-        <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: "0.08em" }}>
-          {label}
-        </Typography>
-      </Box>
-      <Typography variant="h4" sx={{ color, fontFamily: "'Syne', sans-serif" }}>
-        {fmtNum(value)}
-      </Typography>
-    </Card>
-  );
+
 
   const deviceIcon = (key) => {
     if (key === "MOBILE")  return <Smartphone size={13} />;

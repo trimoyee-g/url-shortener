@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Box, Typography, Button, IconButton, Tooltip, Avatar, Menu, MenuItem,
   Divider, Card, Stack, Skeleton, TableContainer, Table,
@@ -9,7 +9,7 @@ import {
   Zap, Plus, RefreshCw, LogOut, Link as LinkIcon, BarChart2, QrCode,
   Trash2, Check, Copy, LayoutDashboard, List, MousePointer,
   Users, TrendingUp, TrendingDown, Globe, Monitor, Smartphone, Tablet,
-  Search, ChevronRight, ArrowUpRight, Lock,
+  Search, ChevronRight, Lock,
 } from "lucide-react";
 
 import { api }                                    from "../services/api";
@@ -242,6 +242,7 @@ function DashboardView({ token, snack }) {
     }
   }, [token, days]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadDash(); }, [loadDash]);
 
   const changePct = dashboard?.clicksChangePct;
@@ -453,8 +454,8 @@ function DashboardView({ token, snack }) {
 
 // ─── My Links view ───────────────────────────────────────────────────────────
 function LinksView({
-  token, urls, loading, onRefresh, onOpenStats, onOpenQr,
-  onDeleteTarget, onCreated, onOpenCreate, snack,
+  urls, loading, onRefresh, onOpenStats, onOpenQr,
+  onDeleteTarget, onOpenCreate, snack,
 }) {
   const [search,     setSearch]     = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -670,6 +671,7 @@ export default function Dashboard({ token, email, onLogout }) {
     }
   }, [token]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadUrls(); }, [loadUrls]);
 
   const handleDelete = async () => {
