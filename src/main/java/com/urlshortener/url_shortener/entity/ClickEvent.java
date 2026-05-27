@@ -1,5 +1,6 @@
 package com.urlshortener.url_shortener.entity;
 
+import com.urlshortener.url_shortener.util.DeviceParser;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -34,6 +35,12 @@ public class ClickEvent {
     // "XX" = unknown/private IP. Nullable=false safe now since GeoIpService always returns a value.
     @Column(length = 2, nullable = false)
     private String country;
+
+    // Parsed from userAgent at write time so analytics queries never load raw UA strings.
+    @Enumerated(EnumType.STRING)
+    @Column(length = 10, nullable = false)
+    @Builder.Default
+    private DeviceParser.DeviceType deviceType = DeviceParser.DeviceType.DESKTOP;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)

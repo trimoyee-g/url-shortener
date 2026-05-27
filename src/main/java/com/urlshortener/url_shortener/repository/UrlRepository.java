@@ -40,5 +40,13 @@ public interface UrlRepository extends JpaRepository<Url, Long> {
 
     @Query("SELECT u.shortCode FROM Url u WHERE u.active = true")
     List<String> findAllActiveShortCodes();
+
+    // All active short codes for a given user — used for dashboard aggregate queries.
+    @Query("SELECT u.shortCode FROM Url u WHERE u.user.email = :email AND u.active = true")
+    List<String> findActiveShortCodesByUserEmail(@Param("email") String email);
+
+    // Count of active links owned by a user.
+    @Query("SELECT COUNT(u) FROM Url u WHERE u.user.email = :email AND u.active = true")
+    long countActiveByUserEmail(@Param("email") String email);
 }
 

@@ -4,6 +4,7 @@ import com.urlshortener.url_shortener.config.RabbitMQConfig;
 import com.urlshortener.url_shortener.dto.UrlClickEvent;
 import com.urlshortener.url_shortener.entity.ClickEvent;
 import com.urlshortener.url_shortener.repository.ClickEventRepository;
+import com.urlshortener.url_shortener.util.DeviceParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -25,12 +26,15 @@ public class AnalyticsConsumer {
             String ip = dto.getIpAddress() != null ? dto.getIpAddress() : "0.0.0.0";
             String country = geoIpService.getCountryCode(ip);
 
+            DeviceParser.DeviceType deviceType = DeviceParser.parse(dto.getUserAgent());
+
             ClickEvent event = ClickEvent.builder()
                     .shortCode(dto.getShortCode())
                     .ipAddress(ip)
                     .userAgent(dto.getUserAgent())
                     .referrer(dto.getReferer())
                     .country(country)
+                    .deviceType(deviceType)
                     .build();
 
             clickEventRepository.save(event);
