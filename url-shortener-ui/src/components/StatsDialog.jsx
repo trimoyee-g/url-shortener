@@ -23,7 +23,7 @@ function MiniAreaChart({ data }) {
   const entries = Object.entries(data).sort(([a], [b]) => a.localeCompare(b));
   const values  = entries.map(([, v]) => v);
   const max     = Math.max(...values, 1);
-  const W = 500, H = 80, PAD = 2;
+  const W = 500, H = 80;
 
   // Single data point — show a centred dot + label instead of an invisible line
   if (entries.length === 1) {
