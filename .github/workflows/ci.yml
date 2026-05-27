@@ -27,11 +27,10 @@ jobs:
 
       - name: Run tests
         run: mvn test -B
-        env:
-          # Hardcoded test-only value — Spring falls back to the application.yml default
-          # only when the variable is *unset*, not when it's an empty string, so we
-          # always supply an explicit value here to avoid context-startup failures.
-          JWT_SECRET: ci-dummy-secret-not-used-in-production
+        # No JWT_SECRET env var — when the variable is absent (not just empty),
+        # Spring correctly uses the Base64 default in application.yml.
+        # Passing ${{ secrets.JWT_SECRET }} when the secret isn't configured
+        # resolves to "", which IS set but fails Base64 decoding → 500 on register.
 
   # ── Frontend Lint + Build ────────────────────────────────────────────────────
   test-frontend:
