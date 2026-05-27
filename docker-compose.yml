@@ -61,7 +61,7 @@ services:
   # ── Spring Boot app ────────────────────────────────────────────────────────
   app:
     build: .
-    image: trimoyeeg/url-shortener:v2
+    image: trimoyeeg/url-shortener:latest
     ports:
       - "8080:8080"
     depends_on:

@@ -436,7 +436,7 @@ Frontend available at `http://localhost:5173`, backend at `http://localhost:8080
 ### Docker Hub
 
 ```bash
-docker pull trimoyeeg/url-shortener:v2
+docker pull trimoyeeg/url-shortener:latest
 ```
 
 ### Stopping
