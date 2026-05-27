@@ -20,6 +20,7 @@ A production-oriented URL shortener built with Java, Spring Boot, React, Redis, 
 - [Overview](#overview)
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
+- [Features](#features)
 - [Performance](#performance)
 - [Caching Strategy](#caching-strategy)
 - [Rate Limiting](#rate-limiting)
@@ -58,7 +59,8 @@ Spring Boot API
       ├─ Idempotency check (MySQL): has this user already shortened this URL?
       │        │ YES → return existing short code
       │        │ NO
-      │  Snowflake ID + Base62 → shortCode
+      │  Snowflake ID + Base62 → shortCode   (or use custom alias)
+      │  Optionally: hash password, append UTM params, set TTL
       │
       ├─→ MySQL         (persist URL record — synchronous)
       ├─→ Redis         (cache URL)
@@ -76,11 +78,24 @@ Client  GET /{shortCode}
            ▼
      Spring Boot API
            │
-           ├─ 1. Cuckoo Filter ── NOT IN FILTER → 404
-           │        │ MIGHT EXIST
-           ├─ 2. Redis cache ──────────────────────── HIT → 302 Redirect
-           │        │ MISS
-           └─ 3. MySQL → repopulate Redis ──────────────── 302 Redirect
+           ├─ 1. Cuckoo Filter
+           │        │ NOT IN FILTER
+           │        └──────────────→ 404
+           ├─ 2. Redis Cache
+           │        ├─ HIT
+           │        │     ├─ protected (sentinel)
+           │        │     │        └──→ Serve unlock page
+           │        │     └─ open
+           │        │          └──→ 302 Redirect
+           │        └─ MISS
+           └─ 3. MySQL
+                    │
+                    ├─ not found ────────────────────────→ 404
+                    └─ found → repopulate Redis
+                             ├─ protected=true
+                             │        └──→ Serve unlock page
+                             └─ protected=false
+                                      └──→ 302 Redirect
            │
            │ (non-blocking, fire-and-forget)
            ▼
@@ -89,8 +104,28 @@ Client  GET /{shortCode}
            ▼
      AnalyticsConsumer
            ├─ GeoIP lookup (MaxMind)
+           ├─ Device classification (User-Agent → MOBILE/TABLET/DESKTOP)
            ├─→ MySQL   (persist ClickEvent)
            └─→ Redis   (increment click counter)
+```
+
+### Password Unlock Path
+
+```
+Client  POST /{shortCode}/unlock  { "password": "…" }
+           │
+           ▼
+     Spring Boot API
+           │
+           ├─ MySQL lookup
+           │        │ not found → 404
+           │        │ found
+           ├─ BCrypt verify against stored hash
+           │        │ WRONG → 401 Unauthorized
+           │        │ OK
+           └─ Return { shortCode, redirectUrl }
+                  │
+                  ▼ (click event published, client redirects)
 ```
 
 ### Delete Path — URL Deletion
@@ -119,7 +154,7 @@ Spring Boot (Micrometer) → Prometheus → Grafana
 |---|---|
 | Frontend | React 19, Vite, Material UI |
 | Backend | Java 17, Spring Boot |
-| Security | Spring Security, JWT |
+| Security | Spring Security, JWT, BCrypt |
 | Database | MySQL |
 | Caching | Redis Stack (Cuckoo Filter via CF commands) |
 | Messaging | RabbitMQ (Spring AMQP) |
@@ -127,6 +162,38 @@ Spring Boot (Micrometer) → Prometheus → Grafana
 | Containerization | Docker, Docker Compose |
 | Testing | JUnit 5, Mockito, RestAssured, Testcontainers, Awaitility |
 | Build | Maven |
+
+---
+
+## Features
+
+### Custom aliases
+
+When shortening a URL, supply an optional `customAlias` (3–20 characters, `[a-zA-Z0-9_-]`) to get a human-readable short code instead of a generated one. Alias uniqueness is enforced at the database level.
+
+### URL expiration (TTL)
+
+Set `ttlSeconds` on a shorten request to create a time-limited link. Expired links are detected at redirect time, removed from the Cuckoo Filter, and return 410 Gone.
+
+### Password-protected links
+
+Set `password` on a shorten request to create a private link. When a visitor hits the short URL, the server detects the password hash and serves a self-contained HTML unlock page (no external dependencies, styled to match the app theme). The visitor enters the password, which is verified via BCrypt server-side at `POST /{shortCode}/unlock`. On success the client receives the destination URL and performs the redirect.
+
+### UTM campaign tracking
+
+Supply any combination of `utmSource`, `utmMedium`, and `utmCampaign` when creating a URL. The parameters are automatically appended to the destination URL on every redirect, so campaign attribution lands in your analytics stack without requiring changes to destination pages.
+
+### Device-type analytics
+
+Every click event is classified into `MOBILE`, `TABLET`, or `DESKTOP` by parsing the `User-Agent` header. The breakdown is surfaced per-link in the stats view and rolled up in the account dashboard.
+
+### Account-level dashboard analytics
+
+`GET /api/v1/analytics/dashboard?days=N` returns aggregate stats across all of a user's active links for the requested time window: total clicks, unique visitors, total active links, click trend vs. the prior period, clicks-by-day time series, top countries, top referrers, and device breakdown.
+
+### QR code generation
+
+`GET /api/v1/urls/{shortCode}/qr?size=300` returns a PNG QR code for the short URL, generated server-side via ZXing.
 
 ---
 
@@ -207,9 +274,10 @@ Distributed leaky bucket algorithm implemented via Redis Lua scripts — atomic 
 
 RabbitMQ-based asynchronous event streaming decouples analytics from the critical request path:
 
-- Click events are published to a RabbitMQ direct exchange immediately after redirect, without blocking the response
-- The `AnalyticsConsumer` processes events off the queue: performs GeoIP lookup, persists a `ClickEvent` to MySQL, and increments the per-URL click counter in Redis
-- Per-URL click counts, geographic breakdown, and clicks-by-day tracked in the dashboard
+- Click events are published to a RabbitMQ direct exchange immediately after redirect (or after a successful password unlock), without blocking the response
+- The `AnalyticsConsumer` processes events off the queue: performs GeoIP lookup, classifies the device type from the User-Agent, persists a `ClickEvent` to MySQL, and increments the per-URL click counter in Redis
+- Per-URL stats: click counts, unique visitors (distinct IPs), geographic breakdown, referrer breakdown, device breakdown, and clicks-by-day
+- Account dashboard: aggregate totals and trends across all a user's active links
 - RabbitMQ's task queue model (message deleted after ACK) is a natural fit: each click event needs to be processed exactly once with no need for replay or multiple consumer groups
 
 ---
@@ -247,6 +315,10 @@ The Prometheus datasource is provisioned automatically on first boot — no manu
 
 **Synchronous URL persistence** — URL records are written to MySQL, Redis, and the Cuckoo Filter in a single synchronous transaction during the shorten request. This eliminates the consistency window that an async approach creates: a URL is immediately resolvable after creation with no race between the write path and read path.
 
+**BCrypt for link passwords** — link passwords are stored as BCrypt hashes (strength 12). Protected links are cached in Redis using a sentinel value (`__PROTECTED__`) rather than the actual destination URL. A cache hit on the sentinel triggers the unlock page without ever exposing the destination. On a cache miss, the MySQL record is checked and the sentinel is written back — so subsequent requests for a protected link never reach MySQL again.
+
+**UTM params appended at resolve time** — UTM parameters are stored alongside the URL record and appended to the destination URL at redirect time by `UtmUtils`. This means the short URL remains clean for sharing while campaign attribution is always injected correctly.
+
 **RabbitMQ for analytics** — click events are fire-and-forget from the redirect path's perspective. RabbitMQ's task queue model is the right fit: each message is consumed once and deleted on ACK, which is exactly the semantics analytics needs. Unlike a log-based broker, there is no offset to manage and no risk of replay buildup from consumer lag.
 
 **Redis Lua scripts for rate limiting** — Lua scripts execute atomically on Redis, ensuring the leaky bucket counter check-and-decrement is a single operation with no race conditions across instances.
@@ -272,16 +344,30 @@ GET    /api/v1/urls
 DELETE /api/v1/urls/{shortCode}
 ```
 
+**Shorten request body fields:**
+
+| Field | Required | Description |
+|---|---|---|
+| `longUrl` | yes | Destination URL |
+| `customAlias` | no | Human-readable alias (3–20 chars, `[a-zA-Z0-9_-]`) |
+| `ttlSeconds` | no | Link lifetime in seconds; omit for default expiry |
+| `password` | no | Password to protect the link (BCrypt hashed at rest) |
+| `utmSource` | no | `utm_source` appended to the destination URL |
+| `utmMedium` | no | `utm_medium` appended to the destination URL |
+| `utmCampaign` | no | `utm_campaign` appended to the destination URL |
+
 ### Redirect
 
 ```
-GET /{shortCode}
+GET  /{shortCode}           — redirects (302), or serves unlock page if password-protected
+POST /{shortCode}/unlock    — verify password, returns { shortCode, redirectUrl }
 ```
 
 ### Analytics
 
 ```
-GET /api/v1/urls/{shortCode}/stats
+GET /api/v1/urls/{shortCode}/stats?days=30   — per-link analytics
+GET /api/v1/analytics/dashboard?days=30      — account-level aggregate analytics
 ```
 
 ### QR code
@@ -320,7 +406,12 @@ REDIS_HOST=redis
 REDIS_PORT=6379
 RABBITMQ_USERNAME=guest
 RABBITMQ_PASSWORD=guest
+BASE_URL=http://localhost:8080
+MACHINE_ID=1
 ```
+
+`BASE_URL` is used when constructing short URLs returned by the API. Set it to your public domain in production.  
+`MACHINE_ID` is the Snowflake node ID (0–1023). Must be unique per running app instance when scaling horizontally.
 
 ### 3. Start the stack
 
@@ -345,7 +436,7 @@ Frontend available at `http://localhost:5173`, backend at `http://localhost:8080
 ### Docker Hub
 
 ```bash
-docker pull trimoyeeg/url-shortener:v5
+docker pull trimoyeeg/url-shortener:v2
 ```
 
 ### Stopping

@@ -1,5 +1,6 @@
 services:
 
+  # ── MySQL ──────────────────────────────────────────────────────────────────
   mysql:
     image: mysql:8.0
     environment:
@@ -16,10 +17,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
     restart: unless-stopped
     networks:
       - app-network
 
+  # ── Redis ──────────────────────────────────────────────────────────────────
   redis:
     image: redis/redis-stack:latest
     ports:
@@ -31,15 +34,17 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
     restart: unless-stopped
     networks:
       - app-network
 
+  # ── RabbitMQ ───────────────────────────────────────────────────────────────
   rabbitmq:
     image: rabbitmq:3-management
     ports:
       - "5672:5672"
-      - "15672:15672"
+      - "15672:15672"     # management UI
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
@@ -48,40 +53,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
     restart: unless-stopped
     networks:
       - app-network
 
-  prometheus:
-    image: prom/prometheus
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-    ports:
-      - "9090:9090"
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--web.enable-remote-write-receiver'
-    restart: unless-stopped
-    networks:
-      - app-network
-
-  grafana:
-    image: grafana/grafana
-    ports:
-      - "3000:3000"
-    depends_on:
-      - prometheus
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
-    restart: unless-stopped
-    networks:
-      - app-network
-
+  # ── Spring Boot app ────────────────────────────────────────────────────────
   app:
     build: .
-    image: trimoyeeg/url-shortener:v5
+    image: trimoyeeg/url-shortener:v2
     ports:
       - "8080:8080"
     depends_on:
@@ -92,13 +72,66 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: ${DB_URL}?useSSL=false&allowPublicKeyRetrieval=true
-      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
-      SPRING_DATA_REDIS_HOST: ${REDIS_HOST}
-      SPRING_RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
-      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
-      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      # Database
+      DB_URL: ${DB_URL:-jdbc:mysql://mysql:3306/url_shortener}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      # Redis
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+
+      # RabbitMQ
+      RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+
+      # Security — override the insecure default in application.yml
+      JWT_SECRET: ${JWT_SECRET}
+
+      # Public base URL used when generating short links (e.g. https://trim.it)
+      BASE_URL: ${BASE_URL:-http://localhost:8080}
+
+      # Snowflake ID generator — must be unique per app instance (0-1023)
+      MACHINE_ID: ${MACHINE_ID:-1}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ── Prometheus ─────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--web.enable-remote-write-receiver'
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # ── Grafana ────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
     restart: unless-stopped
     networks:
       - app-network
