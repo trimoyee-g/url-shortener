@@ -1,5 +1,6 @@
 package com.urlshortener.url_shortener.service;
 
+import com.urlshortener.url_shortener.dto.PagedResponse;
 import com.urlshortener.url_shortener.dto.ShortenRequest;
 import com.urlshortener.url_shortener.dto.UnlockRequest;
 import com.urlshortener.url_shortener.dto.UnlockResponse;
@@ -31,11 +32,13 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 import java.io.ByteArrayOutputStream;
 import com.google.zxing.BarcodeFormat;
@@ -237,21 +240,36 @@ public class UrlServiceImpl implements UrlService {
 
     // ── List user's URLs ──────────────────────────────────────────────────────
 
+    private static final int PAGE_SIZE = 10;
+
     @Override
-    public List<UrlResponse> getUserUrls(String userEmail) {
+    public PagedResponse<UrlResponse> getUserUrls(String userEmail, int page) {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
-        Set<Url> urls = urlRepository.findByUserIdAndActiveTrueOrderByCreatedAtDesc(user.getId());
-        if (urls.isEmpty()) return List.of();
+        Page<Url> urlPage = urlRepository.findByUserIdAndActiveTrueOrderByCreatedAtDesc(
+                user.getId(), PageRequest.of(page, PAGE_SIZE));
+
+        if (urlPage.isEmpty()) return PagedResponse.<UrlResponse>builder()
+                .content(List.of()).page(page).pageSize(PAGE_SIZE)
+                .totalElements(0).totalPages(0).last(true).build();
 
         // Batch-load click counts in a single query to avoid N+1
-        List<String> codes = urls.stream().map(Url::getShortCode).toList();
+        List<String> codes = urlPage.stream().map(Url::getShortCode).toList();
         Map<String, Long> clickCounts = batchClickCounts(codes);
 
-        return urls.stream()
+        List<UrlResponse> content = urlPage.stream()
                 .map(url -> toResponse(url, clickCounts.getOrDefault(url.getShortCode(), 0L)))
                 .toList();
+
+        return PagedResponse.<UrlResponse>builder()
+                .content(content)
+                .page(page)
+                .pageSize(PAGE_SIZE)
+                .totalElements(urlPage.getTotalElements())
+                .totalPages(urlPage.getTotalPages())
+                .last(urlPage.isLast())
+                .build();
     }
 
     /**

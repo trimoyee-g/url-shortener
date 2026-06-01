@@ -1,17 +1,16 @@
 package com.urlshortener.url_shortener.service;
 
+import com.urlshortener.url_shortener.dto.PagedResponse;
 import com.urlshortener.url_shortener.dto.ShortenRequest;
 import com.urlshortener.url_shortener.dto.UnlockRequest;
 import com.urlshortener.url_shortener.dto.UnlockResponse;
 import com.urlshortener.url_shortener.dto.UrlResponse;
 
-import java.util.List;
-
 public interface UrlService {
     UrlResponse shorten(ShortenRequest request, String userEmail, String remoteAddr);
     String resolve(String shortCode);
     void delete(String shortCode, String userEmail);
-    List<UrlResponse> getUserUrls(String userEmail);
+    PagedResponse<UrlResponse> getUserUrls(String userEmail, int page);
 
     /**
      * Verify a password for a password-protected short link and return the destination URL.

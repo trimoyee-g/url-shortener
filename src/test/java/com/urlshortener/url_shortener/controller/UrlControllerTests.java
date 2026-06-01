@@ -1,6 +1,7 @@
 package com.urlshortener.url_shortener.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.urlshortener.url_shortener.dto.PagedResponse;
 import com.urlshortener.url_shortener.dto.ShortenRequest;
 import com.urlshortener.url_shortener.dto.UrlResponse;
 import com.urlshortener.url_shortener.exception.ForbiddenException;
@@ -217,16 +218,20 @@ class UrlControllerTests {
                     .longUrl("https://github.com")
                     .build();
 
-            when(urlService.getUserUrls(TEST_USER))
-                    .thenReturn(List.of(buildUrlResponse(), second));
+            PagedResponse<UrlResponse> paged = PagedResponse.<UrlResponse>builder()
+                    .content(List.of(buildUrlResponse(), second))
+                    .page(0).pageSize(10).totalElements(2).totalPages(1).last(true)
+                    .build();
+
+            when(urlService.getUserUrls(TEST_USER, 0)).thenReturn(paged);
 
             mockMvc.perform(get(BASE_URL))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.length()").value(2))
-                    .andExpect(jsonPath("$[0].shortCode").value(TEST_SHORT_CODE))
-                    .andExpect(jsonPath("$[1].shortCode").value("xyz789"));
+                    .andExpect(jsonPath("$.content.length()").value(2))
+                    .andExpect(jsonPath("$.content[0].shortCode").value(TEST_SHORT_CODE))
+                    .andExpect(jsonPath("$.content[1].shortCode").value("xyz789"));
 
-            verify(urlService, times(1)).getUserUrls(TEST_USER);
+            verify(urlService, times(1)).getUserUrls(TEST_USER, 0);
         }
 
         @Test
@@ -234,13 +239,17 @@ class UrlControllerTests {
         @DisplayName("200 OK — returns empty list when user has no URLs")
         void returnsEmptyListWhenNoUrls() throws Exception {
 
-            when(urlService.getUserUrls(TEST_USER)).thenReturn(List.of());
+            PagedResponse<UrlResponse> empty = PagedResponse.<UrlResponse>builder()
+                    .content(List.of()).page(0).pageSize(10).totalElements(0).totalPages(0).last(true)
+                    .build();
+
+            when(urlService.getUserUrls(TEST_USER, 0)).thenReturn(empty);
 
             mockMvc.perform(get(BASE_URL))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.length()").value(0));
+                    .andExpect(jsonPath("$.content.length()").value(0));
 
-            verify(urlService, times(1)).getUserUrls(TEST_USER);
+            verify(urlService, times(1)).getUserUrls(TEST_USER, 0);
         }
 
         @Test
@@ -248,13 +257,17 @@ class UrlControllerTests {
         @DisplayName("delegates to service using authenticated user's username only")
         void delegatesWithCorrectUsername() throws Exception {
 
-            when(urlService.getUserUrls("bob@example.com")).thenReturn(List.of());
+            PagedResponse<UrlResponse> empty = PagedResponse.<UrlResponse>builder()
+                    .content(List.of()).page(0).pageSize(10).totalElements(0).totalPages(0).last(true)
+                    .build();
+
+            when(urlService.getUserUrls("bob@example.com", 0)).thenReturn(empty);
 
             mockMvc.perform(get(BASE_URL))
                     .andExpect(status().isOk());
 
-            verify(urlService).getUserUrls("bob@example.com");
-            verify(urlService, never()).getUserUrls(TEST_USER);
+            verify(urlService).getUserUrls("bob@example.com", 0);
+            verify(urlService, never()).getUserUrls(TEST_USER, 0);
         }
     }
 

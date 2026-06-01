@@ -1,5 +1,6 @@
 package com.urlshortener.url_shortener.controller;
 
+import com.urlshortener.url_shortener.dto.PagedResponse;
 import com.urlshortener.url_shortener.dto.ShortenRequest;
 import com.urlshortener.url_shortener.dto.UrlResponse;
 import com.urlshortener.url_shortener.service.UrlService;
@@ -13,7 +14,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/urls")
@@ -38,9 +38,10 @@ public class UrlController {
     }
 
     @GetMapping
-    public ResponseEntity<List<UrlResponse>> myUrls(
-            @AuthenticationPrincipal UserDetails principal) {
-        return ResponseEntity.ok(urlService.getUserUrls(principal.getUsername()));
+    public ResponseEntity<PagedResponse<UrlResponse>> myUrls(
+            @AuthenticationPrincipal UserDetails principal,
+            @RequestParam(defaultValue = "0") int page) {
+        return ResponseEntity.ok(urlService.getUserUrls(principal.getUsername(), page));
     }
 
     @DeleteMapping("/{shortCode}")

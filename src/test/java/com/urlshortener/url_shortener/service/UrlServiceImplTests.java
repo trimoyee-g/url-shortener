@@ -22,6 +22,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -29,7 +31,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -406,13 +407,11 @@ class UrlServiceImplTests {
             when(userRepository.findByEmail(user.getEmail()))
                     .thenReturn(Optional.of(user));
 
-            LinkedHashSet<Url> urls = new LinkedHashSet<>();
-            urls.add(buildUrl("a1"));
-            urls.add(buildUrl("a2"));
+            List<Url> urls = List.of(buildUrl("a1"), buildUrl("a2"));
 
             when(urlRepository.findByUserIdAndActiveTrueOrderByCreatedAtDesc(
-                    user.getId()
-            )).thenReturn(urls);
+                    eq(user.getId()), any(PageRequest.class)
+            )).thenReturn(new PageImpl<>(urls));
 
             when(clickEventRepository.countClicksPerCode(anyList()))
                     .thenReturn(List.of(
@@ -420,13 +419,10 @@ class UrlServiceImplTests {
                             new Object[]{"a2", 10L}
                     ));
 
-            List<UrlResponse> responses =
-                    urlService.getUserUrls(user.getEmail());
+            var response = urlService.getUserUrls(user.getEmail(), 0);
 
-            assertThat(responses)
-                    .hasSize(2);
-
-            assertThat(responses)
+            assertThat(response.getContent()).hasSize(2);
+            assertThat(response.getContent())
                     .extracting(UrlResponse::getShortCode)
                     .containsExactlyInAnyOrder("a1", "a2");
         }
