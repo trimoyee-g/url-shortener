@@ -18,6 +18,8 @@ A production-oriented URL shortener built with Java, Spring Boot, React, Redis, 
 ## Table of Contents
 
 - [Overview](#overview)
+- [Engineering Highlights](#engineering-highlights)
+- [Screenshots](#screenshots)
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
 - [Features](#features)
@@ -43,6 +45,36 @@ A URL shortener built to handle real production load — not just a CRUD app. Ke
 - **Distributed rate limiting** — leaky bucket via Redis Lua scripts, enforced atomically across all instances
 - **Full observability** — Prometheus and Grafana tracking P95/P99 latencies, cache hit ratios, and queue depth
 - **Load tested** — verified at 1500 concurrent users, 1232 req/s at peak, sub-139ms P95 redirect latency
+
+---
+
+## Engineering Highlights
+
+- Redis-first redirect path with Cuckoo Filter cache penetration protection
+- RabbitMQ-powered asynchronous analytics pipeline
+- Distributed rate limiting using Redis Lua scripts
+- Snowflake ID generation with Base62 encoding
+- Full observability via Prometheus + Grafana
+- Tested to 1,232 req/s under 1,500 concurrent users
+
+---
+
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="docs/landingPage.png" alt="Landing Page" width="100%"/></td>
+    <td><img src="docs/showFeatures.png" alt="Features" width="100%"/></td>
+  </tr>
+  <tr>
+    <td><img src="docs/authPage.png" alt="Auth Page" width="100%"/></td>
+    <td><img src="docs/myLinks.png" alt="My Links" width="100%"/></td>
+  </tr>
+  <tr>
+    <td><img src="docs/shortenURL.png" alt="Shorten URL" width="100%"/></td>
+    <td><img src="docs/analytics.png" alt="Analytics" width="100%"/></td>
+  </tr>
+</table>
 
 ---
 
@@ -78,26 +110,27 @@ Client  GET /{shortCode}
            ▼
      Spring Boot API
            │
-           ├─ 1. Cuckoo Filter
-           │        │ NOT IN FILTER
-           │        └──────────────→ 404
-           ├─ 2. Redis Cache
-           │        ├─ HIT
-           │        │     ├─ protected (sentinel)
-           │        │     │        └──→ Serve unlock page
-           │        │     └─ open
-           │        │          └──→ 302 Redirect
-           │        └─ MISS
-           └─ 3. MySQL
-                    │
-                    ├─ not found ────────────────────────→ 404
-                    └─ found → repopulate Redis
-                             ├─ protected=true
-                             │        └──→ Serve unlock page
-                             └─ protected=false
-                                      └──→ 302 Redirect
-           │
-           │ (non-blocking, fire-and-forget)
+           │  STEP 1 — Cuckoo Filter (always first)
+           ├─ mightContain(shortCode)?
+           │        │ NO  → 404  (rejected before Redis or MySQL are touched)
+           │        │ YES
+           │        ▼
+           │  STEP 2 — Redis cache (only reached if code might exist)
+           ├─ cache lookup
+           │        │ HIT, sentinel  → 302 to unlock page
+           │        │ HIT, open      → 302 Redirect  ◄── hot path ends here
+           │        │ MISS
+           │        ▼
+           │  STEP 3 — MySQL (only reached on cache miss)
+           └─ DB lookup
+                    │ not found ──────────────────────→ 404
+                    │ found, expired → remove from CF → 404
+                    │ found
+                    ├─ repopulate Redis (sentinel or longUrl)
+                    ├─ protected=true  → 302 to unlock page
+                    └─ protected=false → 302 Redirect
+
+           │ (after redirect — non-blocking, fire-and-forget)
            ▼
      RabbitMQ [url.clicks.exchange]
            │ async
@@ -210,7 +243,7 @@ Load tested using k6 with 1,000 concurrent virtual users
 | Redirect P99 latency | 119.68ms  |
 | Redirect success rate | 100%      |
 | Shorten P95 latency | 117.57ms  |
-| Shorten P99 latency | 251.03s   |
+| Shorten P99 latency | 251.03ms  |
 | Shorten success rate | 100%      |
 | Peak throughput | 548 req/s |
 | Total requests served | 383K+     |
@@ -311,6 +344,10 @@ The Prometheus datasource is provisioned automatically on first boot — no manu
 
 ## Key Design Decisions
 
+**Soft delete with deferred hard purge** — URLs are never immediately hard-deleted. A `DELETE` request sets `active = false` and evicts the Redis cache entry and Cuckoo Filter fingerprint. A scheduled job runs every 5 minutes to soft-delete expired links. A separate daily job (3am) hard-deletes URLs and their orphaned click events in batches of 500 rows with a 100ms pause between batches — preventing long-held table locks at scale. The 90-day retention window between soft and hard delete preserves analytics history and allows recovery from accidental deletes.
+
+**Paginated URL listing** — `GET /api/v1/urls` returns a `PagedResponse` with 10 results per page rather than the full list. This prevents unbounded memory usage for users with many links and keeps response times predictable.
+
 **Snowflake ID + Base62 encoding** — Snowflake generates distributed unique 64-bit IDs without coordination. Base62 encoding produces compact 7–10 character short codes with negligible collision probability at scale.
 
 **Synchronous URL persistence** — URL records are written to MySQL, Redis, and the Cuckoo Filter in a single synchronous transaction during the shorten request. This eliminates the consistency window that an async approach creates: a URL is immediately resolvable after creation with no race between the write path and read path.
@@ -340,9 +377,20 @@ POST /api/v1/auth/login
 
 ```
 POST   /api/v1/urls/shorten
-GET    /api/v1/urls
+GET    /api/v1/urls?page=0       — paginated (10 per page)
 DELETE /api/v1/urls/{shortCode}
 ```
+
+**`GET /api/v1/urls` response fields:**
+
+| Field | Description |
+|---|---|
+| `content` | Array of URL objects for the current page |
+| `page` | Current page number (0-indexed) |
+| `pageSize` | Number of results per page (10) |
+| `totalElements` | Total number of active links |
+| `totalPages` | Total number of pages |
+| `last` | `true` if this is the final page |
 
 **Shorten request body fields:**
 
