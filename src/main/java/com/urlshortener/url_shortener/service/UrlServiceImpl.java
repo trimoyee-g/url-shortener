@@ -368,21 +368,4 @@ public class UrlServiceImpl implements UrlService {
     }
 
     @Override
-    public byte[] generateQr(String shortCode, int size) {
-        Url url = urlRepository.findByShortCodeAndActiveTrue(shortCode)
-                .orElseThrow(() -> new UrlNotFoundException(shortCode));
-
-        String shortUrl = baseUrl + "/" + url.getShortCode();
-
-        QRCodeWriter qrWriter = new QRCodeWriter();
-        try {
-            BitMatrix matrix = qrWriter.encode(shortUrl, BarcodeFormat.QR_CODE, size, size);
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            MatrixToImageWriter.writeToStream(matrix, "PNG", baos);
-            return baos.toByteArray();
-        } catch (WriterException | IOException e) {
-            log.error("Failed to generate QR for {}", shortCode, e);
-            throw new RuntimeException("Failed to generate QR code");
-        }
-    }
-}
+    public byte[] generateQr(String s

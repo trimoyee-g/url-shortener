@@ -367,24 +367,4 @@ class UrlControllerTests {
             when(urlService.generateQr(TEST_SHORT_CODE, 300)).thenReturn(fakePng);
 
             mockMvc.perform(get(QR_URL, TEST_SHORT_CODE))
-                    .andExpect(status().isOk());
-
-            verify(urlService, times(1)).generateQr(TEST_SHORT_CODE, 300);
-            verify(urlService, never()).generateQr(eq(TEST_SHORT_CODE), intThat(s -> s != 300));
-        }
-
-        @Test
-        @WithMockUser(username = TEST_USER)
-        @DisplayName("404 Not Found — QR for unknown short code returns 404")
-        void returnsNotFoundForUnknownShortCode() throws Exception {
-
-            when(urlService.generateQr(TEST_SHORT_CODE, 300))
-                    .thenThrow(new UrlNotFoundException(TEST_SHORT_CODE));
-
-            mockMvc.perform(get(QR_URL, TEST_SHORT_CODE))
-                    .andExpect(status().isNotFound());
-
-            verify(urlService, times(1)).generateQr(TEST_SHORT_CODE, 300);
-        }
-    }
-}
+                    .andExpect(status().

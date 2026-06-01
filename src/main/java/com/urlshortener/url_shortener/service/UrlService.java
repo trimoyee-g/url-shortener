@@ -23,5 +23,4 @@ public interface UrlService {
      * @param shortCode short code / alias
      * @param size pixel width/height of the square QR image
      */
-    byte[] generateQr(String shortCode, int size);
-}
+ 
