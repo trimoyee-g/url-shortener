@@ -228,7 +228,7 @@ class UrlShortenerE2ETest extends BaseE2ETest {
                 .get("/api/v1/urls")
                 .then()
                 .statusCode(200)
-                .body("$.size()", equalTo(0));
+                .body("content.size()", equalTo(0));
 
         Awaitility.await()
                 .atMost(15, TimeUnit.SECONDS)
@@ -239,7 +239,7 @@ class UrlShortenerE2ETest extends BaseE2ETest {
                                 .get("/api/v1/urls")
                                 .then()
                                 .statusCode(200)
-                                .body("$.size()", equalTo(2))
+                                .body("content.size()", equalTo(2))
                 );
     }
 
@@ -368,6 +368,4 @@ class UrlShortenerE2ETest extends BaseE2ETest {
                                 .statusCode(200)
                                 .body("shortCode", equalTo(shortCode))
                                 .body("totalClicks", equalTo(3))
-                );
-    }
-}
+                

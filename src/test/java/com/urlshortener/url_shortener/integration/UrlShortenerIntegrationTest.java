@@ -207,7 +207,7 @@ class UrlShortenerIntegrationTest extends BaseIntegrationTest {
             mockMvc.perform(get("/api/v1/urls")
                             .header("Authorization", "Bearer " + token))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.length()").value(2));
+                    .andExpect(jsonPath("$.content.length()").value(2));
         }
 
         @Test
@@ -221,7 +221,7 @@ class UrlShortenerIntegrationTest extends BaseIntegrationTest {
             mockMvc.perform(get("/api/v1/urls")
                             .header("Authorization", "Bearer " + bobToken))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.length()").value(0));
+                    .andExpect(jsonPath("$.content.length()").value(0));
         }
     }
 
@@ -379,6 +379,4 @@ class UrlShortenerIntegrationTest extends BaseIntegrationTest {
             mockMvc.perform(get("/api/v1/urls/{shortCode}/stats", "notexist")
                             .header("Authorization", "Bearer " + token))
                     .andExpect(status().isNotFound());
-        }
-    }
-}
+   
