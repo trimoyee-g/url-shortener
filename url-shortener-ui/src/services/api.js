@@ -54,8 +54,8 @@ export const api = {
     return r.json();
   },
 
-  async getUrls(token) {
-    const r = await fetch(`${BASE}/urls`, {
+  async getUrls(token, page = 0) {
+    const r = await fetch(`${BASE}/urls?page=${page}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!r.ok) throw new Error("Failed to fetch URLs");

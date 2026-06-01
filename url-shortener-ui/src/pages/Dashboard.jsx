@@ -3,7 +3,7 @@ import {
   Box, Typography, Button, IconButton, Tooltip, Avatar, Menu, MenuItem,
   Divider, Card, Stack, Skeleton, TableContainer, Table,
   TableHead, TableRow, TableCell, TableBody, Paper, Chip, Snackbar, Alert,
-  InputBase, CircularProgress,
+  InputBase, CircularProgress, Pagination,
 } from "@mui/material";
 import {
   Zap, Plus, RefreshCw, LogOut, Link as LinkIcon, BarChart2, QrCode,
@@ -501,6 +501,7 @@ function DashboardView({ token, snack }) {
 function LinksView({
   urls, loading, onRefresh, onOpenStats, onOpenQr,
   onDeleteTarget, onOpenCreate, snack,
+  page, totalPages, onPageChange,
 }) {
   const [search,     setSearch]     = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -513,7 +514,7 @@ function LinksView({
     setTimeout(() => setCopied(null), 1800);
   };
 
-  const filtered = urls.filter((u) => {
+  const filtered = (urls ?? []).filter((u) => {
     const matchSearch =
       u.shortCode.toLowerCase().includes(search.toLowerCase()) ||
       u.longUrl.toLowerCase().includes(search.toLowerCase());
@@ -687,6 +688,33 @@ function LinksView({
           </Table>
         </TableContainer>
       )}
+
+      {totalPages > 1 && (
+        <Box sx={{ display: "flex", justifyContent: "center", pt: 1 }}>
+          <Pagination
+            count={totalPages}
+            page={page + 1}
+            onChange={(_, val) => onPageChange(val - 1)}
+            shape="rounded"
+            sx={{
+              "& .MuiPaginationItem-root": {
+                color: C.muted,
+                fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: "0.75rem",
+                borderColor: C.border,
+              },
+              "& .MuiPaginationItem-root.Mui-selected": {
+                background: "rgba(56,189,248,0.12)",
+                color: C.cyan,
+                borderColor: "rgba(56,189,248,0.4)",
+              },
+              "& .MuiPaginationItem-root:hover": {
+                background: "rgba(56,189,248,0.06)",
+              },
+            }}
+          />
+        </Box>
+      )}
     </Stack>
   );
 }
@@ -695,6 +723,8 @@ function LinksView({
 export default function Dashboard({ token, email, onLogout }) {
   const [urls,          setUrls]          = useState([]);
   const [urlsLoading,   setUrlsLoading]   = useState(true);
+  const [page,          setPage]          = useState(0);
+  const [totalPages,    setTotalPages]    = useState(1);
   const [view,          setView]          = useState("dashboard");
   const [createOpen,    setCreateOpen]    = useState(false);
   const [qrUrl,         setQrUrl]         = useState(null);
@@ -704,11 +734,12 @@ export default function Dashboard({ token, email, onLogout }) {
   const [anchorEl,      setAnchorEl]      = useState(null);
   const { snack, show, hide } = useSnack();
 
-  const loadUrls = useCallback(async () => {
+  const loadUrls = useCallback(async (p = 0) => {
     setUrlsLoading(true);
     try {
-      const data = await api.getUrls(token);
-      setUrls(data);
+      const data = await api.getUrls(token, p);
+      setUrls(data?.content ?? []);
+      setTotalPages(data?.totalPages ?? 1);
     } catch (e) {
       show(e.message, "error");
     } finally {
@@ -716,8 +747,8 @@ export default function Dashboard({ token, email, onLogout }) {
     }
   }, [token]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { loadUrls(); }, [loadUrls]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadUrls(page); }, [page, loadUrls]);
 
   const handleDelete = async () => {
     setDeleteLoading(true);
@@ -895,7 +926,10 @@ export default function Dashboard({ token, email, onLogout }) {
               token={token}
               urls={urls}
               loading={urlsLoading}
-              onRefresh={loadUrls}
+              onRefresh={() => loadUrls(page)}
+              page={page}
+              totalPages={totalPages}
+              onPageChange={(p) => setPage(p)}
               onOpenStats={(url) => setStatsUrl(url)}
               onOpenQr={(code) => setQrUrl(code)}
               onDeleteTarget={(code) => setDeleteTarget(code)}
