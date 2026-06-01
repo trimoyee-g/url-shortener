@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import org.springframework.data.jpa.repository.Modifying;
 
 public interface ClickEventRepository extends JpaRepository<ClickEvent, Long> {
 
@@ -120,6 +121,12 @@ public interface ClickEventRepository extends JpaRepository<ClickEvent, Long> {
         GROUP BY c.shortCode
         """)
     List<Object[]> countClicksPerCode(@Param("codes") Collection<String> codes);
+
+    // ── Purge ─────────────────────────────────────────────────────────────────
+
+    @Modifying
+    @Query("DELETE FROM ClickEvent c WHERE c.shortCode IN :shortCodes")
+    int deleteByShortCodeIn(@Param("shortCodes") List<String> shortCodes);
 
     // ── Prior-period totals for change % calculation ──────────────────────────
 

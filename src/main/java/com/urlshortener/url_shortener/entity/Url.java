@@ -3,6 +3,7 @@ package com.urlshortener.url_shortener.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
 
@@ -48,6 +49,9 @@ public class Url {
     @CreationTimestamp
     @Column(updatable = false)
     private Instant createdAt;
+
+    @UpdateTimestamp
+    private Instant updatedAt;
 
     @PrePersist
     @PreUpdate

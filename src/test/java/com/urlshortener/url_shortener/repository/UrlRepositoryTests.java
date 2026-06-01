@@ -12,6 +12,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -261,11 +264,11 @@ public class UrlRepositoryTests {
                     buildUrl(142L, "a3", "url3", false, FUTURE, user)  // inactive — must be excluded
             ));
 
-            Set<Url> result = urlRepository
-                    .findByUserIdAndActiveTrueOrderByCreatedAtDesc(user.getId());
+            Page<Url> result = urlRepository
+                    .findByUserIdAndActiveTrueOrderByCreatedAtDesc(user.getId(), PageRequest.of(0, 10));
 
-            assertThat(result).hasSize(2);
-            assertThat(result).extracting(Url::getShortCode)
+            assertThat(result.getContent()).hasSize(2);
+            assertThat(result.getContent()).extracting(Url::getShortCode)
                     .containsExactlyInAnyOrder("a1", "a2");
         }
 
@@ -278,10 +281,10 @@ public class UrlRepositoryTests {
             urlRepository.saveAndFlush(
                     buildUrl(143L, "u1url", "url", true, FUTURE, user1));
 
-            Set<Url> result = urlRepository
-                    .findByUserIdAndActiveTrueOrderByCreatedAtDesc(user2.getId());
+            Page<Url> result = urlRepository
+                    .findByUserIdAndActiveTrueOrderByCreatedAtDesc(user2.getId(), PageRequest.of(0, 10));
 
-            assertThat(result).isEmpty();
+            assertThat(result.getContent()).isEmpty();
         }
 
         @Test
@@ -289,10 +292,10 @@ public class UrlRepositoryTests {
         void returnsEmptySet_whenNoUrls() {
             User user = createAndPersistUser();
 
-            Set<Url> result = urlRepository
-                    .findByUserIdAndActiveTrueOrderByCreatedAtDesc(user.getId());
+            Page<Url> result = urlRepository
+                    .findByUserIdAndActiveTrueOrderByCreatedAtDesc(user.getId(), PageRequest.of(0, 10));
 
-            assertThat(result).isEmpty();
+            assertThat(result.getContent()).isEmpty();
         }
     }
 

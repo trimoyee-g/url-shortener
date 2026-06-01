@@ -8,6 +8,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -18,6 +19,7 @@ public class CleanupService {
 
     private final UrlRepository urlRepository;
     private final RedisTemplate<String, String> redisTemplate;
+    private final UrlPurgeService urlPurgeService;
 
     /**
      * Runs every 5 minutes. Soft-deletes expired URLs, then invalidates their Redis keys.
@@ -41,6 +43,33 @@ public class CleanupService {
                     .forEach(redisTemplate::delete);
             log.info("Cleanup: deactivated {} expired URLs, invalidated {} cache keys",
                     deactivated, codes.size());
+        }
+    }
+
+    /**
+     * Runs daily at 3am. Hard-deletes URLs inactive for 90+ days and their orphaned
+     * click events, in batches of 500 with a 100ms pause between each so the DB
+     * is never locked for more than a small chunk at a time.
+     */
+    @Scheduled(cron = "0 0 3 * * *")
+    public void purgeOldInactiveUrls() {
+        Instant cutoff = Instant.now().minus(Duration.ofDays(90));
+        int totalPurged = 0;
+        int batch;
+
+        do {
+            batch = urlPurgeService.deleteNextBatch(cutoff);
+            totalPurged += batch;
+            if (batch > 0) {
+                try { Thread.sleep(100); } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        } while (batch > 0);
+
+        if (totalPurged > 0) {
+            log.info("Purge complete: hard-deleted {} URLs (and their click events) inactive for 90+ days", totalPurged);
         }
     }
 }
