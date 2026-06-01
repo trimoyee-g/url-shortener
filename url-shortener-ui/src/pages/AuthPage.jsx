@@ -1,9 +1,9 @@
 import { useState } from "react";
 import {
   Box, Typography, Stack, TextField, Alert,
-  Button, CircularProgress,
+  Button, CircularProgress, InputAdornment, IconButton,
 } from "@mui/material";
-import { Zap, ArrowRight, ArrowLeft, Shield } from "lucide-react";
+import { Zap, ArrowRight, ArrowLeft, Shield, Eye, EyeOff } from "lucide-react";
 import { api } from "../services/api";
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -47,6 +47,7 @@ export default function AuthPage({ onAuth, onBack }) {
   const [email,        setEmail]        = useState("");
   const [password,     setPassword]     = useState("");
   const [name,         setName]         = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading,      setLoading]      = useState(false);
   const [apiError,     setApiError]     = useState("");
   const [fieldErrors,  setFieldErrors]  = useState({});
@@ -288,7 +289,7 @@ export default function AuthPage({ onAuth, onBack }) {
 
             <TextField
               label="Password"
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => { setPassword(e.target.value); clearField("password"); }}
               onKeyDown={(e) => e.key === "Enter" && submit()}
@@ -299,6 +300,23 @@ export default function AuthPage({ onAuth, onBack }) {
                 (isRegister ? "8+ chars · upper + lower · number · symbol" : "")
               }
               autoComplete={isRegister ? "new-password" : "current-password"}
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setShowPassword((v) => !v)}
+                        edge="end"
+                        size="small"
+                        sx={{ color: C.muted, "&:hover": { color: C.text } }}
+                        tabIndex={-1}
+                      >
+                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                },
+              }}
             />
 
             {apiError && (

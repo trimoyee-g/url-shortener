@@ -48,7 +48,7 @@ const FEATURES = [
   {
     icon: Shield,
     title: "Secure by Default",
-    desc:  "JWT auth, BCrypt passwords, cuckoo-filter dedup, and non-root containers.",
+    desc:  "Your account and links are protected. Passwords are encrypted, sessions expire automatically, and duplicate links are handled safely.",
   },
 ];
 
