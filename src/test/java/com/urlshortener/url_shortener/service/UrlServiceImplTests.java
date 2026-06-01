@@ -482,4 +482,6 @@ class UrlServiceImplTests {
                 .active(true)
                 .createdAt(Instant.now())
                 .expiresAt(Instant.now().plusSeconds(3600))
-                .build(
+                .build();
+    }
+}

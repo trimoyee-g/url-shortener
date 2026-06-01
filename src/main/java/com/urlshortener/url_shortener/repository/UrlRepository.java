@@ -48,4 +48,21 @@ public interface UrlRepository extends JpaRepository<Url, Long> {
     List<String> findActiveShortCodesByUserEmail(@Param("email") String email);
 
     // Count of active links owned by a user.
-    @Query("SELECT COUNT(u) FROM Url u WHERE u.user.email = :ema
+    @Query("SELECT COUNT(u) FROM Url u WHERE u.user.email = :email AND u.active = true")
+    long countActiveByUserEmail(@Param("email") String email);
+
+    // ── Hard-delete purge (batched) ───────────────────────────────────────────
+
+    // Fetch a batch of IDs for inactive URLs deactivated before :cutoff
+    @Query("SELECT u.id FROM Url u WHERE u.active = false AND u.updatedAt < :cutoff ORDER BY u.id")
+    List<Long> findInactiveBatch(@Param("cutoff") Instant cutoff, Pageable pageable);
+
+    // Fetch short codes for a set of URL ids (needed to delete click events first)
+    @Query("SELECT u.shortCode FROM Url u WHERE u.id IN :ids")
+    List<String> findShortCodesByIds(@Param("ids") List<Long> ids);
+
+    @Modifying
+    @Query("DELETE FROM Url u WHERE u.id IN :ids")
+    int deleteByIds(@Param("ids") List<Long> ids);
+}
+

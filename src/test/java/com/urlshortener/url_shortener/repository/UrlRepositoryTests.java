@@ -464,4 +464,10 @@ public class UrlRepositoryTests {
             User user = createAndPersistUser();
             urlRepository.saveAndFlush(buildUrl(202L, "dup", "url1", true, FUTURE, user));
 
-            assertThatThrownB
+            assertThatThrownBy(() ->
+                    urlRepository.saveAndFlush(
+                            buildUrl(203L, "dup", "url2", true, FUTURE, user))
+            ).isInstanceOf(DataIntegrityViolationException.class);
+        }
+    }
+}

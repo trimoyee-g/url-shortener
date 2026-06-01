@@ -57,4 +57,7 @@ public class Url {
     @PreUpdate
     public void normalize() {
         if (shortCode != null) shortCode = shortCode.trim();
-        if (longUrl != null
+        if (longUrl != null) longUrl = longUrl.trim();
+        if (customAlias != null) customAlias = customAlias.trim();
+    }
+}

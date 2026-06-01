@@ -41,4 +41,35 @@ public class CleanupService {
             codes.stream()
                     .map(code -> "url:" + code)
                     .forEach(redisTemplate::delete);
-            log.info("Cleanup: deactivated {} expired URLs, invalidated {} ca
+            log.info("Cleanup: deactivated {} expired URLs, invalidated {} cache keys",
+                    deactivated, codes.size());
+        }
+    }
+
+    /**
+     * Runs daily at 3am. Hard-deletes URLs inactive for 90+ days and their orphaned
+     * click events, in batches of 500 with a 100ms pause between each so the DB
+     * is never locked for more than a small chunk at a time.
+     */
+    @Scheduled(cron = "0 0 3 * * *")
+    public void purgeOldInactiveUrls() {
+        Instant cutoff = Instant.now().minus(Duration.ofDays(90));
+        int totalPurged = 0;
+        int batch;
+
+        do {
+            batch = urlPurgeService.deleteNextBatch(cutoff);
+            totalPurged += batch;
+            if (batch > 0) {
+                try { Thread.sleep(100); } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        } while (batch > 0);
+
+        if (totalPurged > 0) {
+            log.info("Purge complete: hard-deleted {} URLs (and their click events) inactive for 90+ days", totalPurged);
+        }
+    }
+}

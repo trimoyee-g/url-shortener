@@ -379,4 +379,6 @@ class UrlShortenerIntegrationTest extends BaseIntegrationTest {
             mockMvc.perform(get("/api/v1/urls/{shortCode}/stats", "notexist")
                             .header("Authorization", "Bearer " + token))
                     .andExpect(status().isNotFound());
-   
+        }
+    }
+}

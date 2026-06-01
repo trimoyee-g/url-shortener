@@ -368,4 +368,6 @@ class UrlShortenerE2ETest extends BaseE2ETest {
                                 .statusCode(200)
                                 .body("shortCode", equalTo(shortCode))
                                 .body("totalClicks", equalTo(3))
-                
+                );
+    }
+}
