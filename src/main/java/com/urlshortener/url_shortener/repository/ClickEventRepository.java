@@ -128,14 +128,4 @@ public interface ClickEventRepository extends JpaRepository<ClickEvent, Long> {
     @Query("DELETE FROM ClickEvent c WHERE c.shortCode IN :shortCodes")
     int deleteByShortCodeIn(@Param("shortCodes") List<String> shortCodes);
 
-    // ── Prior-period totals for change % calculation ──────────────────────────
-
-    @Query("""
-        SELECT COUNT(c) FROM ClickEvent c
-        WHERE c.shortCode IN :codes
-        AND c.clickedAt >= :from AND c.clickedAt < :to
-        """)
-    long countClicksForCodesBetween(@Param("codes") Collection<String> codes,
-                                    @Param("from") Instant from,
-                                    @Param("to") Instant to);
-}
+    // ── Prior-period totals for change % calculation ───�
