@@ -978,4 +978,7 @@ export default function Dashboard({ token, email, onLogout }) {
           sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.75rem" }}>
           {snack.msg}
         </Alert>
-      </Snackb
+      </Snackbar>
+    </Box>
+  );
+}
