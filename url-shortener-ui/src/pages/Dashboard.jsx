@@ -747,7 +747,7 @@ export default function Dashboard({ token, email, onLogout }) {
     }
   }, [token]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadUrls(page); }, [page, loadUrls]);
 
   const handleDelete = async () => {
@@ -978,7 +978,4 @@ export default function Dashboard({ token, email, onLogout }) {
           sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.75rem" }}>
           {snack.msg}
         </Alert>
-      </Snackbar>
-    </Box>
-  );
-}
+      </Snackb

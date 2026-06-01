@@ -109,6 +109,4 @@ export const api = {
       const body = await r.json().catch(() => ({}));
       throw new Error(body.message || "Incorrect password");
     }
-    return r.json();
-  },
-};
+    re
